@@ -20,8 +20,10 @@ class Process:
     process_type: ProcessType
     download_url: str
     csv_path: str
+    report_folder: str
     pickle_path: str
     report_path: str
+    today: str
 
 
 @define
@@ -53,6 +55,7 @@ class CredentialsBPM:
 class BpmInfo:
     chrome_path: ChromePath
     creds: CredentialsBPM
+    download_folder: str
 
 
 @define
@@ -92,11 +95,15 @@ class BusinessTripOrder:
     start_date: Date
     end_date: Date
     trip_place: str
+    trip_code: str
     trip_target: str
     main_order_number: str
     main_order_start_date: Date
     deputy_fullname: Optional[str]
     deputy_names: Optional[Tuple[str, str]]
+    employee_status: Optional[str] = None
+    branch_num: Optional[str] = None
+    tab_num: Optional[str] = None
 
     def as_dict(self):
         return {
@@ -107,6 +114,7 @@ class BusinessTripOrder:
             "start_date": self.start_date.as_dict(),
             "end_date": self.end_date.as_dict(),
             "trip_place": self.trip_place,
+            "trip_code": self.trip_code,
             "trip_target": self.trip_target,
             "main_order_number": self.main_order_number,
             "main_order_start_date": self.main_order_start_date.as_dict(),
@@ -128,6 +136,9 @@ class VacationOrder:
     surcharge: str
     substitution_start: str
     substitution_end: str
+    employee_status: Optional[str] = None
+    branch_num: Optional[str] = None
+    tab_num: Optional[str] = None
 
     def as_dict(self):
         return {
@@ -152,6 +163,9 @@ class VacationWithdrawOrder:
     order_type: str
     order_number: str
     withdraw_date: Date
+    employee_status: Optional[str] = None
+    branch_num: Optional[str] = None
+    tab_num: Optional[str] = None
 
     def as_dict(self):
         return {
@@ -171,6 +185,9 @@ class FiringOrder:
     order_number: str
     compensation: str
     firing_date: Date
+    employee_status: Optional[str] = None
+    branch_num: Optional[str] = None
+    tab_num: Optional[str] = None
 
     def as_dict(self):
         return {
@@ -194,68 +211,6 @@ class Button:
     def click(self) -> None:
         mouse.click(button="left", coords=(self.x, self.y))
 
-    def check_and_click(
-        self, app: pywinauto.Application, target_button_name: str
-    ) -> None:
-        mouse.move(coords=(self.x, self.y))
-        status_bar = app.window(title_re="Банковская система.+")["StatusBar"]
-        if status_bar.window_text().strip() == target_button_name:
-            self.click()
-
-    def find_and_click_button(
-        self,
-        app: pywinauto.Application,
-        window: pywinauto.WindowSpecification,
-        toolbar: pywinauto.WindowSpecification,
-        target_button_name: str,
-        horizontal: bool = True,
-        offset: int = 5,
-    ) -> "Button":
-        if not window.has_focus():
-            window.set_focus()
-
-        if self.x != -1 and self.y != -1:
-            self.click()
-            return self
-
-        status_win = app.window(title_re="Банковская система.+")
-        rectangle = toolbar.rectangle()
-        mid_point = rectangle.mid_point()
-        mouse.move(coords=(mid_point.x, mid_point.y))
-
-        start_point = rectangle.left if horizontal else rectangle.top
-        end_point = rectangle.right if horizontal else rectangle.bottom
-
-        x, y = mid_point.x, mid_point.y
-        point = 0
-
-        x_offset = offset if horizontal else 0
-        y_offset = offset if not horizontal else 0
-
-        i = 0
-        while (
-            status_win["StatusBar"].window_text().strip() != target_button_name
-            or point >= end_point
-        ):
-            point = start_point + i * 5
-
-            if horizontal:
-                x = point
-            else:
-                y = point
-
-            mouse.move(coords=(x, y))
-            i += 1
-
-        window.set_focus()
-        sleep(1)
-
-        self.x = x + x_offset
-        self.y = y + y_offset
-        self.click()
-
-        return self
-
 
 @define
 class Buttons:
@@ -263,6 +218,7 @@ class Buttons:
     employee_orders: Button = Button()
     create_new_order: Button = Button()
     order_save: Button = Button()
-    operations_list: Button = Button()
+    operations_list_prs: Button = Button()
+    operations_list_orders: Button = Button()
     operation: Button = Button()
     cities_menu: Button = Button()

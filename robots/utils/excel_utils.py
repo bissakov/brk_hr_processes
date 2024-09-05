@@ -1,8 +1,17 @@
 import os
 from contextlib import contextmanager
+
+import psutil
 import win32com.client as win32
 
-from robots.utils.utils import kill_all_processes
+
+def kill_all_processes(proc_name: str) -> None:
+    for proc in psutil.process_iter():
+        try:
+            if proc_name in proc.name():
+                proc.terminate()
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            continue
 
 
 @contextmanager
