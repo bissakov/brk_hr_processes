@@ -1,3 +1,12 @@
 @echo off
 cd %~dp0
-C:\Users\robotX2\Desktop\komandirovka_py\.venv\Scripts\python.exe C:\Users\robotX2\Desktop\komandirovka_py\src\main.py
+set cwd=%cd%
+
+if exist "%cwd%\.venv\Scripts\python.exe" (
+    %cwd%\.venv\Scripts\python.exe %cwd%\robots\main.py
+) else if exist "%cwd%\venv\Scripts\python.exe" (
+    %cwd%\venv\Scripts\python.exe %cwd%\robots\main.py
+) else (
+    echo No virtual environment found in .venv or venv folders.
+    exit /b 1
+)
