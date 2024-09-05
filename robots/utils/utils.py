@@ -3,6 +3,8 @@ import os
 import pandas as pd
 import psutil
 
+from robots.data import Order, Process
+
 
 def kill_all_processes(proc_name: str) -> None:
     for proc in psutil.process_iter():
@@ -28,30 +30,28 @@ def create_report(report_file_path: str):
 
 
 def update_report(
-    person_name: str,
-    order_number: str,
-    report_file_path: str,
-    today: str,
+    order: Order,
+    process: Process,
     operation: str,
     status: str,
 ):
-    df = pd.read_excel(report_file_path)
+    df = pd.read_excel(process.report_path)
 
     if not (
-        (df["Дата"] == today)
-        & (df["Сотрудник"] == person_name)
+        (df["Дата"] == process.today)
+        & (df["Сотрудник"] == order.employee_fullname)
         & (df["Операция"] == operation)
-        & (df["Номер приказа"] == order_number)
+        & (df["Номер приказа"] == order.order_number)
     ).any():
         new_row = {
-            "Дата": today,
-            "Сотрудник": person_name,
+            "Дата": process.today,
+            "Сотрудник": order.employee_fullname,
             "Операция": operation,
-            "Номер приказа": order_number,
+            "Номер приказа": order.order_number,
             "Статус": status,
         }
         df.loc[len(df)] = new_row
-        df.to_excel(report_file_path, index=False)
+        df.to_excel(process.report_path, index=False)
 
 
 def does_order_exist(orders_file_path: str, order_type: str, order_number: str) -> bool:

@@ -14,7 +14,6 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
 from robots.data import (
-    ChromePath,
     CredentialsBPM,
     BpmInfo,
     Date,
@@ -26,19 +25,20 @@ from robots.data import (
     Order,
     FiringOrder,
 )
+from robots.notification import TelegramAPI
 
 
-def driver_init(chrome_path: ChromePath, download_folder: str) -> Chrome:
-    service = chrome_service.Service(executable_path=chrome_path.driver_path)
+def driver_init(bpm_info: BpmInfo) -> Chrome:
+    service = chrome_service.Service(executable_path=bpm_info.chrome_path.driver_path)
     options = ChromeOptions()
-    options.binary_location = chrome_path.binary_path
+    options.binary_location = bpm_info.chrome_path.binary_path
     prefs = {"profile.default_content_setting_values.notifications": 2}
     options.add_experimental_option("prefs", prefs)
     options.add_argument("--start-maximized")
     options.add_experimental_option(
         "prefs",
         {
-            "download.default_directory": download_folder,
+            "download.default_directory": bpm_info.download_folder,
             "download.directory_upgrade": True,
             "download.prompt_for_download": False,
         },
@@ -115,7 +115,7 @@ def download_report(
     return False
 
 
-def convert_to_dataclass(process: Process) -> None:
+def convert_to_dataclass(process: Process) -> int:
     orders: List[Order] = []
     df = pd.read_csv(process.csv_path, delimiter=";", dtype=str)
 
@@ -151,7 +151,22 @@ def convert_to_dataclass(process: Process) -> None:
         )
         df = df.replace({np.nan: None})
 
+        report_folder = os.path.dirname(process.report_path)
+        with open(
+            os.path.join(report_folder, "cities.json"), "r", encoding="utf-8"
+        ) as f:
+            cities = json.load(f)
+
         for _, order_dict in df.iterrows():
+            trip_place = order_dict["trip_place"]
+            trip_bpm = trip_place.replace("город ", "").replace("г. ", "")
+            trip_bpm = trip_bpm.split(",")[0]
+            trip_code = cities.get(trip_bpm)
+            if not trip_code:
+                trip_code = ""
+            else:
+                trip_code = trip_code.replace(f".{trip_bpm}", "")
+
             order = BusinessTripOrder(
                 employee_fullname=order_dict["employee_fullname"],
                 employee_names=order_dict["employee_names"],
@@ -159,7 +174,8 @@ def convert_to_dataclass(process: Process) -> None:
                 sign_date=Date(order_dict["sign_date"]),
                 start_date=Date(order_dict["start_date"]),
                 end_date=Date(order_dict["end_date"]),
-                trip_place=order_dict["trip_place"],
+                trip_place=trip_place,
+                trip_code=trip_code,
                 trip_target=order_dict["trip_target"],
                 main_order_number=order_dict["main_order_number"],
                 main_order_start_date=Date(order_dict["main_order_start_date"]),
@@ -281,12 +297,15 @@ def convert_to_dataclass(process: Process) -> None:
             [order.as_dict() for order in orders], f, ensure_ascii=False, indent=2
         )
 
+    return len(orders)
+
 
 def run(
     driver: Chrome,
     is_logged_in: bool,
     bpm_info: BpmInfo,
     process: Process,
+    bot: TelegramAPI,
 ) -> None:
     wait = WebDriverWait(driver, 10)
     if not is_logged_in:
@@ -300,4 +319,11 @@ def run(
     ):
         raise Exception("Failed to download the report")
 
-    convert_to_dataclass(process=process)
+    order_count = convert_to_dataclass(process=process)
+
+    if order_count == 1:
+        bot.send_message(f"{process.process_type.name} - 1 приказ из BPM")
+    elif 2 <= order_count <= 4:
+        bot.send_message(f"{process.process_type.name} - {order_count} приказа из BPM")
+    else:
+        bot.send_message(f"{process.process_type.name} - {order_count} приказов из BPM")

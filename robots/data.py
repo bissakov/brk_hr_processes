@@ -22,6 +22,7 @@ class Process:
     csv_path: str
     pickle_path: str
     report_path: str
+    today: str
 
 
 @define
@@ -53,6 +54,7 @@ class CredentialsBPM:
 class BpmInfo:
     chrome_path: ChromePath
     creds: CredentialsBPM
+    download_folder: str
 
 
 @define
@@ -92,6 +94,7 @@ class BusinessTripOrder:
     start_date: Date
     end_date: Date
     trip_place: str
+    trip_code: str
     trip_target: str
     main_order_number: str
     main_order_start_date: Date
@@ -107,6 +110,7 @@ class BusinessTripOrder:
             "start_date": self.start_date.as_dict(),
             "end_date": self.end_date.as_dict(),
             "trip_place": self.trip_place,
+            "trip_code": self.trip_code,
             "trip_target": self.trip_target,
             "main_order_number": self.main_order_number,
             "main_order_start_date": self.main_order_start_date.as_dict(),
@@ -263,6 +267,7 @@ class Buttons:
     employee_orders: Button = Button()
     create_new_order: Button = Button()
     order_save: Button = Button()
-    operations_list: Button = Button()
+    operations_list_prs: Button = Button()
+    operations_list_orders: Button = Button()
     operation: Button = Button()
     cities_menu: Button = Button()

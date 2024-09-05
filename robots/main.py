@@ -6,11 +6,14 @@ from urllib.parse import urljoin
 
 import dotenv
 
+from robots.notification import TelegramAPI
 
 try:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     import business_trip.colvir
     import vacations.colvir
+    import vacation_withdraws.colvir
+    import firings.colvir
     from robots import bpm
     from robots.bpm import driver_init
     from robots.data import (
@@ -21,13 +24,18 @@ try:
         Processes,
         Process,
         ProcessType,
+        Buttons,
     )
 except ModuleNotFoundError as error:
     raise error
 
 
 if sys.version_info.major != 3 or sys.version_info.minor != 12:
-    raise NotSupportedError(f"Python {sys.version_info} is not supported")
+    raise RuntimeError(f"Python {sys.version_info} is not supported")
+
+warnings.simplefilter(action="ignore", category=UserWarning)
+project_folder = os.path.dirname(os.path.dirname(__file__))
+dotenv.load_dotenv(os.path.join(project_folder, ".env.test"))
 
 
 def get_from_env(key: str) -> str:
@@ -82,31 +90,11 @@ def get_process(
         report_path=os.path.join(
             report_parent_folder, process_type.name.lower(), report_filename
         ),
+        today=today,
     )
 
 
-def main() -> None:
-    warnings.simplefilter(action="ignore", category=UserWarning)
-    project_folder = os.path.dirname(os.path.dirname(__file__))
-
-    dotenv.load_dotenv(os.path.join(project_folder, ".env.test"))
-
-    bpm_info = BpmInfo(
-        creds=CredentialsBPM(
-            user=get_from_env("BPM_USER"), password=get_from_env("BPM_PASSWORD")
-        ),
-        chrome_path=ChromePath(
-            driver_path=os.path.join(project_folder, get_from_env("DRIVER_PATH")),
-            binary_path=os.path.join(project_folder, get_from_env("CHROME_PATH")),
-        ),
-    )
-
-    colvir_info = ColvirInfo(
-        location=get_from_env("COLVIR_PATH"),
-        user=get_from_env("COLVIR_USER"),
-        password=get_from_env("COLVIR_PASSWORD"),
-    )
-
+def main(bot: TelegramAPI) -> None:
     data_folder = os.path.join(project_folder, "data")
     os.makedirs(data_folder, exist_ok=True)
 
@@ -116,10 +104,31 @@ def main() -> None:
     download_folder = os.path.join(data_folder, "downloads")
     os.makedirs(download_folder, exist_ok=True)
 
+    bpm_info = BpmInfo(
+        creds=CredentialsBPM(
+            user=get_from_env("BPM_USER"), password=get_from_env("BPM_PASSWORD")
+        ),
+        chrome_path=ChromePath(
+            driver_path=os.path.join(project_folder, get_from_env("DRIVER_PATH")),
+            binary_path=os.path.join(project_folder, get_from_env("CHROME_PATH")),
+        ),
+        download_folder=download_folder,
+    )
+
+    colvir_info = ColvirInfo(
+        location=get_from_env("COLVIR_PATH"),
+        user=get_from_env("COLVIR_USER"),
+        password=get_from_env("COLVIR_PASSWORD"),
+    )
+
     today = datetime.now().strftime("%d.%m.%y")
 
-    bpm_base_url = get_from_env("BPM_BASE_URL")
+    bot.send_message(
+        f"Старт процесса за {today}\n"
+        f'"Командировки, отпуска, отзывы из отпуска и увольнения"'
+    )
 
+    bpm_base_url = get_from_env("BPM_BASE_URL")
     processes = Processes(
         business_trip=get_process(
             ProcessType.BUSINESS_TRIP,
@@ -151,35 +160,28 @@ def main() -> None:
         ),
     )
 
-    # driver = driver_init(
-    #     chrome_path=bpm_info.chrome_path,
-    #     download_folder=download_folder,
-    # )
-    # with driver:
-    #     is_logged_in = False
-    #     for process in processes:
-    #         bpm.run(
-    #             driver=driver,
-    #             is_logged_in=is_logged_in,
-    #             bpm_info=bpm_info,
-    #             process=process,
-    #         )
-    #         is_logged_in = True
+    with driver_init(bpm_info=bpm_info) as driver:
+        is_logged_in = False
+        for process in processes:
+            bpm.run(
+                driver=driver,
+                is_logged_in=is_logged_in,
+                bpm_info=bpm_info,
+                process=process,
+                bot=bot,
+            )
+            is_logged_in = True
 
-    # business_trip.colvir.run(
-    #     colvir_info=colvir_info,
-    #     today=today,
-    #     report_file_path=processes.business_trip.report_path,
-    #     orders_pickle_path=processes.business_trip.pickle_path,
-    # )
+    buttons = Buttons()
 
-    vacations.colvir.run(
-        colvir_info=colvir_info,
-        today=today,
-        report_file_path=processes.vacation.report_path,
-        orders_pickle_path=processes.vacation.pickle_path,
-    )
+    # business_trip.colvir.run(colvir_info, processes.business_trip, buttons)
+    # vacations.colvir.run(colvir_info, processes.vacation, buttons)
+    # vacation_withdraws.colvir.run(colvir_info, processes.vacation_withdraw, buttons)
+    # firings.colvir.run(colvir_info, processes.firing, buttons)
+
+    bot.send_message("Успешное окончание процесса")
 
 
 if __name__ == "__main__":
-    main()
+    telegram_bot = TelegramAPI()
+    main(bot=telegram_bot)

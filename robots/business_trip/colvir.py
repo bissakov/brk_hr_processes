@@ -8,7 +8,7 @@ import pywinauto.timings
 from pywinauto import mouse
 from pywinauto.win32structures import RECT
 
-from robots.data import ColvirInfo, BusinessTripOrder, Buttons, Button
+from robots.data import ColvirInfo, BusinessTripOrder, Buttons, Button, Process
 from robots.utils.colvir_utils import (
     get_window,
     Colvir,
@@ -24,20 +24,6 @@ from robots.utils.utils import (
     update_report,
 )
 from robots.utils.wiggle import wiggle_mouse
-
-
-def get_colvir_city_code(trip_place: str, work_folder: str) -> Optional[str]:
-    with open(os.path.join(work_folder, "cities.json"), "r", encoding="utf-8") as f:
-        cities = json.load(f)
-
-    city_bpm = trip_place.replace("город ", "").replace("г. ", "")
-    city_bpm = city_bpm.split(",")[0]
-    city_colvir = cities.get(city_bpm)
-    if not city_colvir:
-        return None
-    city_colvir = city_colvir.replace(f".{city_bpm}", "")
-
-    return city_colvir
 
 
 def get_city_mappings(
@@ -160,20 +146,16 @@ def get_city_mappings(
     pass
 
 
-def run(
-    colvir_info: ColvirInfo, today: str, report_file_path: str, orders_pickle_path: str
-):
-    with open(orders_pickle_path, "rb") as f:
+def run(colvir_info: ColvirInfo, process: Process, buttons: Buttons) -> None:
+    with open(process.pickle_path, "rb") as f:
         orders: List[BusinessTripOrder] = pickle.load(f)
 
     assert all(isinstance(order, BusinessTripOrder) for order in orders)
 
-    report_folder = os.path.dirname(report_file_path)
-    create_report(report_file_path)
+    report_folder = os.path.dirname(process.report_path)
+    create_report(process.report_path)
 
     kill_all_processes(proc_name="COLVIR")
-
-    buttons = Buttons()
 
     colvir = Colvir(colvir_info=colvir_info)
     app = colvir.app
@@ -202,10 +184,8 @@ def run(
         confirm_win = app.window(title="Подтверждение")
         if confirm_win.exists():
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status="Приказ не найден",
             )
@@ -236,10 +216,8 @@ def run(
             personal_win.close()
 
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status="Приказ уже создан",
             )
@@ -252,24 +230,45 @@ def run(
         employee_card = get_window(app=app, title="Карточка сотрудника")
         employee_status = employee_card["Edit30"].window_text().strip()
         print(order.employee_fullname, employee_status)
-        if (
-            employee_status == "Уволен"
-            or employee_status == "В командировке"
-            or employee_status == "В отпуске"
-        ):
+        if employee_status == "Уволен":
             employee_card.close()
             orders_win.close()
             personal_win.close()
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status=f"Невозможно создать приказ для сотрудника "
                 f'со статусом "{employee_status}"',
             )
             continue
+
+        if employee_status == "В командировке" or employee_status == "В отпуске":
+            orders_win.wait(wait_for="active enabled")
+            personal_win.set_focus()
+
+            buttons.operations_list_prs.find_and_click_button(
+                app=app,
+                window=personal_win,
+                toolbar=personal_win["Static4"],
+                target_button_name="Выполнить операцию",
+            )
+
+            sleep(0.5)
+            buttons.operation = Button(
+                buttons.operations_list_prs.x,
+                buttons.operations_list_prs.y + 30,
+            )
+            buttons.operation.check_and_click(
+                app=app, target_button_name="Возврат из командировки"
+            )
+
+            confirm_win = get_window(app=app, title="Подтверждение")
+            confirm_win["&Да"].click()
+            wiggle_mouse(duration=2)
+
+            return_win = get_window(app=app, title="Возврат из командировки")
+            return_win["Принять"].click()
 
         branch_num = employee_card["Edit60"].window_text()
         tab_num = employee_card["Edit34"].window_text()
@@ -315,16 +314,10 @@ def run(
         order_win["Edit24"].click_input()
         order_win["Edit24"].set_text(order.end_date.short)
 
-        city_code = get_colvir_city_code(
-            trip_place=order.trip_place, work_folder=report_folder
-        )
-
-        if city_code is None:
+        if not order.trip_code:
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status=f"Не удалось заполнить приказ. Требуется проверка специалистом. "
                 f"Неизвестный город/местоположение - {order.trip_place}",
@@ -338,7 +331,7 @@ def run(
             personal_win.close()
             continue
 
-        order_win["Edit28"].type_keys(city_code, pause=0.2)
+        order_win["Edit28"].type_keys(order.trip_code, pause=0.2)
         order_win["Edit28"].click_input()
         order_win.type_keys("{TAB}", pause=1)
 
@@ -355,7 +348,7 @@ def run(
 
         orders_win.wait(wait_for="active enabled")
 
-        buttons.operations_list.find_and_click_button(
+        buttons.operations_list_prs.find_and_click_button(
             app=app,
             window=orders_win,
             toolbar=orders_win["Static4"],
@@ -364,8 +357,8 @@ def run(
 
         sleep(0.5)
         buttons.operation = Button(
-            buttons.operations_list.x,
-            buttons.operations_list.y + 30,
+            buttons.operations_list_prs.x,
+            buttons.operations_list_prs.y + 30,
         )
         buttons.operation.check_and_click(app=app, target_button_name="Регистрация")
 
@@ -382,14 +375,14 @@ def run(
 
         wiggle_mouse(duration=3)
 
-        buttons.operations_list.click()
+        buttons.operations_list_prs.click()
         sleep(1)
         buttons.operation.click()
         confirm_win = get_window(app=app, title="Подтверждение")
         confirm_win["&Да"].click()
         wiggle_mouse(duration=3)
 
-        buttons.operations_list.click()
+        buttons.operations_list_prs.click()
         sleep(1)
         buttons.operation.click()
         confirm_win = get_window(app=app, title="Подтверждение")
@@ -404,10 +397,8 @@ def run(
         if error_win.exists():
             error_msg = error_win.child_window(class_name="Edit").window_text()
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status=f"Не удалось ИСПОЛНИТЬ приказ. Требуется проверка специалистом. "
                 f'Текст ошибки - "{error_msg}"',
@@ -419,10 +410,8 @@ def run(
 
         if order.deputy_fullname is None:
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status="Приказ создан",
             )
@@ -433,10 +422,8 @@ def run(
         pass
 
         update_report(
-            person_name=order.deputy_fullname,
-            order_number=order.order_number,
-            report_file_path=report_file_path,
-            today=today,
+            order=order,
+            process=process,
             operation="Создание приказа",
             status=f"Приказ создан. Доплата за на период командировки сотрудника {order.employee_fullname}",
         )

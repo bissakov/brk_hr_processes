@@ -3,7 +3,7 @@ import pickle
 from time import sleep
 from typing import List
 
-from robots.data import ColvirInfo, VacationOrder, Buttons, Button
+from robots.data import ColvirInfo, VacationOrder, Buttons, Button, Process
 from robots.utils.colvir_utils import (
     get_window,
     Colvir,
@@ -20,20 +20,16 @@ from robots.utils.utils import (
 from robots.utils.wiggle import wiggle_mouse
 
 
-def run(
-    colvir_info: ColvirInfo, today: str, report_file_path: str, orders_pickle_path: str
-):
-    with open(orders_pickle_path, "rb") as f:
+def run(colvir_info: ColvirInfo, process: Process, buttons: Buttons) -> None:
+    with open(process.pickle_path, "rb") as f:
         orders: List[VacationOrder] = pickle.load(f)
 
     assert all(isinstance(order, VacationOrder) for order in orders)
 
-    report_folder = os.path.dirname(report_file_path)
-    create_report(report_file_path)
+    report_folder = os.path.dirname(process.report_path)
+    create_report(process.report_path)
 
     kill_all_processes(proc_name="COLVIR")
-
-    buttons = Buttons()
 
     colvir = Colvir(colvir_info=colvir_info)
     app = colvir.app
@@ -62,10 +58,8 @@ def run(
         confirm_win = app.window(title="Подтверждение")
         if confirm_win.exists():
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status="Приказ не найден",
             )
@@ -96,10 +90,8 @@ def run(
             personal_win.close()
 
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status="Приказ уже создан",
             )
@@ -118,10 +110,8 @@ def run(
             orders_win.close()
             personal_win.close()
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status=f"Невозможно создать приказ для сотрудника "
                 f'со статусом "{employee_status}"',
@@ -134,6 +124,7 @@ def run(
 
         if employee_status == "В командировке":
             orders_win.wait(wait_for="active enabled")
+            personal_win.set_focus()
 
             buttons.operations_list.find_and_click_button(
                 app=app,
@@ -264,10 +255,8 @@ def run(
         if error_win.exists():
             error_msg = error_win.child_window(class_name="Edit").window_text()
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status=f"Не удалось ИСПОЛНИТЬ приказ. Требуется проверка специалистом. "
                 f'Текст ошибки - "{error_msg}"',
@@ -281,10 +270,8 @@ def run(
 
         if order.deputy_fullname is None:
             update_report(
-                person_name=order.employee_fullname,
-                order_number=order.order_number,
-                report_file_path=report_file_path,
-                today=today,
+                order=order,
+                process=process,
                 operation="Создание приказа",
                 status="Приказ создан",
             )
@@ -295,10 +282,8 @@ def run(
         pass
 
         update_report(
-            person_name=order.deputy_fullname,
-            order_number=order.order_number,
-            report_file_path=report_file_path,
-            today=today,
+            order=order,
+            process=process,
             operation="Создание приказа",
             status=f"Приказ создан. Доплата за на период командировки сотрудника {order.employee_fullname}",
         )
