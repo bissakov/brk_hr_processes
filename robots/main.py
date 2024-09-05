@@ -6,14 +6,13 @@ from urllib.parse import urljoin
 
 import dotenv
 
-from robots.notification import TelegramAPI
 
 try:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     import business_trip.colvir
-    import vacations.colvir
-    import vacation_withdraws.colvir
     import firings.colvir
+    import vacation_withdraws.colvir
+    import vacations.colvir
     from robots import bpm
     from robots.bpm import driver_init
     from robots.data import (
@@ -26,6 +25,9 @@ try:
         ProcessType,
         Buttons,
     )
+    from robots.notification import TelegramAPI, handle_error
+    from robots.utils.colvir_utils import Colvir, kill_all_processes
+
 except ModuleNotFoundError as error:
     raise error
 
@@ -78,22 +80,22 @@ def get_process(
     else:
         report_filename = f"Отчет_увольнений_{today}.xlsx"
 
+    report_folder = os.path.join(report_parent_folder, process_type.name.lower())
+
     return Process(
         process_type=process_type,
         download_url=urljoin(
             bpm_base_url, f"?s=rep_b&id={process_type.value}&reset_page=1&gid=739"
         ),
         csv_path=os.path.join(download_folder, csv_filename),
-        pickle_path=os.path.join(
-            report_parent_folder, process_type.name.lower(), pickle_filename
-        ),
-        report_path=os.path.join(
-            report_parent_folder, process_type.name.lower(), report_filename
-        ),
+        report_folder=report_folder,
+        pickle_path=os.path.join(report_folder, pickle_filename),
+        report_path=os.path.join(report_folder, report_filename),
         today=today,
     )
 
 
+@handle_error
 def main(bot: TelegramAPI) -> None:
     data_folder = os.path.join(project_folder, "data")
     os.makedirs(data_folder, exist_ok=True)
@@ -160,24 +162,26 @@ def main(bot: TelegramAPI) -> None:
         ),
     )
 
-    with driver_init(bpm_info=bpm_info) as driver:
-        is_logged_in = False
-        for process in processes:
-            bpm.run(
-                driver=driver,
-                is_logged_in=is_logged_in,
-                bpm_info=bpm_info,
-                process=process,
-                bot=bot,
-            )
-            is_logged_in = True
+    # with driver_init(bpm_info=bpm_info) as driver:
+    #     is_logged_in = False
+    #     for process in processes:
+    #         bpm.run(
+    #             driver=driver,
+    #             is_logged_in=is_logged_in,
+    #             bpm_info=bpm_info,
+    #             process=process,
+    #             bot=bot,
+    #         )
+    #         is_logged_in = True
 
     buttons = Buttons()
 
-    # business_trip.colvir.run(colvir_info, processes.business_trip, buttons)
-    # vacations.colvir.run(colvir_info, processes.vacation, buttons)
-    # vacation_withdraws.colvir.run(colvir_info, processes.vacation_withdraw, buttons)
-    # firings.colvir.run(colvir_info, processes.firing, buttons)
+    kill_all_processes(proc_name="COLVIR")
+    with Colvir(colvir_info=colvir_info, buttons=buttons) as colvir:
+        business_trip.colvir.run(colvir, processes.business_trip, bot=bot)
+        vacations.colvir.run(colvir, processes.vacation, bot=bot)
+        vacation_withdraws.colvir.run(colvir, processes.vacation_withdraw, bot=bot)
+        firings.colvir.run(colvir, processes.firing, bot=bot)
 
     bot.send_message("Успешное окончание процесса")
 

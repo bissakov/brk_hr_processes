@@ -1,10 +1,15 @@
+import json
 import logging
 import os
+import traceback
 import urllib.parse
-from typing import Dict, Optional, Tuple
+from functools import wraps
+from typing import Dict, Optional, Tuple, Callable, Any, Union, List
 
 import requests
 import requests.adapters
+
+from robots.data import Order
 
 
 def get_secrets() -> Tuple[str, str]:
@@ -31,11 +36,15 @@ class TelegramAPI:
         self.session.mount("http://", requests.adapters.HTTPAdapter(max_retries=5))
 
     def send_message(
-        self,
-        message: str,
-        use_session: bool = True,
+        self, message: str, use_session: bool = True, use_md: bool = False
     ) -> bool:
-        send_data: Dict[str, Optional[str]] = {"chat_id": self.chat_id}
+        send_data: Dict[str, Optional[str]] = {
+            "chat_id": self.chat_id,
+        }
+
+        if use_md:
+            send_data["parse_mode"] = "MarkdownV2"
+
         files = None
 
         url = urllib.parse.urljoin(self.api_url, "sendMessage")
@@ -77,3 +86,43 @@ class TelegramAPI:
                 retry += 1
 
         return False
+
+    @staticmethod
+    def to_md(obj: Union[Dict[str, Any], List[Any], Order]) -> str:
+        try:
+            if isinstance(obj, dict) or isinstance(obj, list):
+                obj_json = json.dumps(obj, ensure_ascii=False, indent=2)
+            elif isinstance(obj, Order):
+                obj_json = json.dumps(
+                    obj.as_dict(),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            else:
+                raise ValueError(f"obj is of the wrong type - {type(obj)}")
+
+            return f"```json\n{obj_json}\n```"
+
+        except (Exception, BaseException) as error:
+            logging.exception(error)
+            return ""
+
+
+def handle_error(func: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(func)
+    def wrapper(*args, **kwargs) -> Any:
+        bot: Optional[TelegramAPI] = kwargs.get("bot")
+
+        try:
+            return func(*args, **kwargs)
+        except KeyboardInterrupt as error:
+            raise error
+        except (Exception, BaseException) as error:
+            logging.exception(error)
+            error_msg = traceback.format_exc()
+
+            if bot:
+                bot.send_message(error_msg)
+            raise error
+
+    return wrapper
