@@ -1,4 +1,5 @@
 venv/
+.venv/
 __pycache__
 chrome-win64/
 data/
