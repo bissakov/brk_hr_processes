@@ -45,7 +45,7 @@ def main():
             "Дата начала": "start_date",
             "Дата окончания": "end_date",
             "Место командирования": "trip_place",
-            "Цель командировки": "trip_target",
+            "Цель командировки": "trip_reason",
             "Номер основного приказа": "main_order_number",
             "Дата начала основного приказа": "main_order_start_date",
             "Имя замещающего сотрудника": "deputy_fullname",

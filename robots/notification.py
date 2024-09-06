@@ -94,7 +94,7 @@ class TelegramAPI:
                 obj_json = json.dumps(obj, ensure_ascii=False, indent=2)
             elif isinstance(obj, Order):
                 obj_json = json.dumps(
-                    obj.as_dict(),
+                    obj.as_dict_short(),
                     indent=2,
                     ensure_ascii=False,
                 )
