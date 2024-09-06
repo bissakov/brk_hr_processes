@@ -2,7 +2,7 @@
 cd %~dp0
 set cwd=%cd%
 
-set PYTHONPATH=%cwd%;%PYTHONPATH%
+set "PYTHONPATH=%cwd%;%PYTHONPATH%"
 
 if exist "%cwd%\.venv\Scripts\python.exe" (
     %cwd%\.venv\Scripts\python.exe %cwd%\robots\main.py
