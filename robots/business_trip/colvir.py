@@ -1,11 +1,85 @@
-import pickle
 from time import sleep
-from typing import List, Optional
+from typing import Optional
 
 from robots.data import BusinessTripOrder, Button, Process
-from robots.notification import TelegramAPI
 from robots.utils.colvir_utils import Colvir
-from robots.utils.utils import create_report, update_report
+
+
+def process_order(colvir: Colvir, process: Process, order: BusinessTripOrder) -> str:
+    personal_win, orders_win, report_status = colvir.process_employee_order_status(
+        process=process, order=order
+    )
+    if report_status:
+        return report_status
+
+    assert personal_win is not None and orders_win is not None
+
+    report_status = colvir.process_employee_card(order)
+    if report_status:
+        orders_win.close()
+        personal_win.close()
+        return report_status
+
+    assert (
+        order.branch_num is not None
+        and order.tab_num is not None
+        and order.employee_status is not None
+    )
+
+    personal_win.set_focus()
+    if order.employee_status == "В командировке":
+        colvir.return_from("Возврат из командировки", personal_win)
+    elif order.employee_status == "В отпуске":
+        colvir.return_from("Возврат из отпуска", personal_win)
+
+    if order.employee_status != "Работающий":
+        pass
+
+    orders_win.set_focus()
+    sleep(1)
+    orders_win.wait(wait_for="active enabled")
+
+    colvir.find_and_click_button(
+        button=colvir.buttons.create_new_order,
+        window=orders_win,
+        toolbar=orders_win["Static4"],
+        target_button_name="Создать новую запись (Ins)",
+    )
+
+    report_status = create_new_entry(colvir=colvir, order=order)
+    if report_status:
+        orders_win.close()
+        personal_win.close()
+        return report_status
+
+    orders_win.wait(wait_for="active enabled")
+
+    colvir.find_and_click_button(
+        button=colvir.buttons.operations_list_prs,
+        window=orders_win,
+        toolbar=orders_win["Static4"],
+        target_button_name="Выполнить операцию",
+    )
+
+    report_status = confirm_new_entry(colvir=colvir)
+    if report_status:
+        orders_win.close()
+        personal_win.close()
+        return report_status
+
+    pass
+
+    if order.deputy_fullname is None:
+        orders_win.close()
+        personal_win.close()
+        return "Приказ создан"
+
+    pass
+
+    orders_win.close()
+    personal_win.close()
+
+    return f"Приказ создан. Доплата за на период командировки сотрудника {order.employee_fullname}"
 
 
 def create_new_entry(
@@ -22,17 +96,34 @@ def create_new_entry(
         order_win["Edit38"].type_keys("{TAB}")
 
     sleep(1)
-
     order_win["Edit40"].type_keys(order.order_number, pause=0.1)
-
     sleep(1)
 
     order_win["Edit4"].click_input()
     order_win["Edit4"].type_keys(order.branch_num, pause=0.2)
     order_win.type_keys("{TAB}", pause=1)
+
+    dialog_text = colvir.dialog_text()
+    if dialog_text is not None:
+        colvir.close_entry_without_saving(order_win=order_win)
+        return (
+            f"Не удалось заполнить приказ. Требуется проверка специалистом. "
+            f"Неизвестное структурное подразделение - {order.branch_num}. "
+            f'Текст ошибки - "{dialog_text}"'
+        )
+
     order_win["Edit10"].click_input()
     order_win["Edit10"].type_keys(order.tab_num, pause=0.2)
     order_win.type_keys("{TAB}", pause=1)
+
+    dialog_text = colvir.dialog_text()
+    if dialog_text is not None:
+        colvir.close_entry_without_saving(order_win=order_win)
+        return (
+            f"Не удалось заполнить приказ. Требуется проверка специалистом. "
+            f"Неизвестный табельный номер - {order.tab_num}. "
+            f'Текст ошибки - "{dialog_text}"'
+        )
 
     if not order_win.has_focus():
         order_win.set_focus()
@@ -44,10 +135,7 @@ def create_new_entry(
     order_win["Edit24"].set_text(order.end_date.short)
 
     if not order.trip_code:
-        order_win.type_keys("{ESC}")
-        confirm_win = colvir.utils.get_window(title="Подтверждение")
-        confirm_win["&Нет"].click()
-
+        colvir.close_entry_without_saving(order_win=order_win)
         return (
             f"Не удалось заполнить приказ. Требуется проверка специалистом. "
             f"Неизвестный город/местоположение - {order.trip_place}"
@@ -57,7 +145,16 @@ def create_new_entry(
     order_win["Edit28"].click_input()
     order_win.type_keys("{TAB}", pause=1)
 
-    order_win["Edit16"].type_keys(order.trip_target, pause=0.1, with_spaces=True)
+    dialog_text = colvir.dialog_text()
+    if dialog_text is not None:
+        colvir.close_entry_without_saving(order_win=order_win)
+        return (
+            f"Не удалось заполнить приказ. Требуется проверка специалистом. "
+            f"Неизвестное место назначения - {order.trip_code}. "
+            f'Текст ошибки - "{dialog_text}"'
+        )
+
+    order_win["Edit16"].type_keys(order.trip_reason, pause=0.1, with_spaces=True)
     order_win["Edit16"].click_input()
     order_win.type_keys("{TAB}", pause=1)
 
@@ -67,7 +164,6 @@ def create_new_entry(
         toolbar=order_win["Static3"],
         target_button_name="Сохранить изменения (PgDn)",
     )
-
     return None
 
 
@@ -120,123 +216,4 @@ def confirm_new_entry(colvir: Colvir) -> Optional[str]:
             f"Не удалось ИСПОЛНИТЬ приказ. Требуется проверка специалистом. "
             f'Текст ошибки - "{error_msg}"'
         )
-
     return None
-
-
-def run(colvir: Colvir, process: Process, bot: TelegramAPI) -> None:
-    with open(process.pickle_path, "rb") as f:
-        orders: List[BusinessTripOrder] = pickle.load(f)
-    assert all(isinstance(order, BusinessTripOrder) for order in orders)
-
-    create_report(process.report_path)
-
-    for i, order in enumerate(orders):
-        bot.send_message(bot.to_md(order), use_md=True)
-
-        personal_win, orders_win, report_status = colvir.process_employee_order_status(
-            process=process, order=order
-        )
-        if report_status:
-            update_report(
-                order=order,
-                process=process,
-                operation="Создание приказа",
-                status=report_status,
-            )
-            continue
-        assert personal_win is not None and orders_win is not None
-
-        report_status = colvir.process_employee_card(order)
-        if report_status:
-            orders_win.close()
-            personal_win.close()
-            update_report(
-                order=order,
-                process=process,
-                operation="Создание приказа",
-                status=report_status,
-            )
-            continue
-        assert (
-            order.branch_num is not None
-            and order.tab_num is not None
-            and order.employee_status is not None
-        )
-
-        personal_win.set_focus()
-        if order.employee_status == "В командировке":
-            colvir.return_from("Возврат из командировки", personal_win)
-        elif order.employee_status == "В отпуске":
-            colvir.return_from("Возврат из отпуска", personal_win)
-
-        if order.employee_status != "Работающий":
-            pass
-
-        orders_win.set_focus()
-        sleep(1)
-        orders_win.wait(wait_for="active enabled")
-
-        colvir.find_and_click_button(
-            button=colvir.buttons.create_new_order,
-            window=orders_win,
-            toolbar=orders_win["Static4"],
-            target_button_name="Создать новую запись (Ins)",
-        )
-
-        report_status = create_new_entry(colvir=colvir, order=order)
-        if report_status:
-            update_report(
-                order=order,
-                process=process,
-                operation="Создание приказа",
-                status=report_status,
-            )
-            orders_win.close()
-            personal_win.close()
-            continue
-
-        orders_win.wait(wait_for="active enabled")
-
-        colvir.find_and_click_button(
-            button=colvir.buttons.operations_list_prs,
-            window=orders_win,
-            toolbar=orders_win["Static4"],
-            target_button_name="Выполнить операцию",
-        )
-
-        report_status = confirm_new_entry(colvir=colvir)
-        if report_status:
-            update_report(
-                order=order,
-                process=process,
-                operation="Создание приказа",
-                status=report_status,
-            )
-            orders_win.close()
-            personal_win.close()
-            continue
-
-        if order.deputy_fullname is None:
-            update_report(
-                order=order,
-                process=process,
-                operation="Создание приказа",
-                status="Приказ создан",
-            )
-            orders_win.close()
-            personal_win.close()
-            continue
-
-        pass
-
-        update_report(
-            order=order,
-            process=process,
-            operation="Создание приказа",
-            status=f"Приказ создан. Доплата за на период командировки сотрудника {order.employee_fullname}",
-        )
-        orders_win.close()
-        personal_win.close()
-
-    pass

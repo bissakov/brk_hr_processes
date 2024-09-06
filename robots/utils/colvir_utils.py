@@ -3,15 +3,17 @@ import random
 import re
 from datetime import timedelta
 from time import sleep
-from typing import Optional, Tuple, cast
+from typing import Optional, Tuple, cast, List, Union
 
 import pandas as pd
 import psutil
 import pyautogui
+import pyperclip
 import pywinauto
 import pywinauto.timings
 import win32con
 import win32gui
+from attr import define
 from pywinauto import mouse, win32functions
 
 from robots.data import (
@@ -28,8 +30,20 @@ from robots.data import (
 )
 from robots.utils.excel_utils import xls_to_xlsx
 
-
 pyautogui.FAILSAFE = False
+
+
+@define
+class DialogContent:
+    title: Optional[str]
+    content: Optional[str]
+    button_names: List[str]
+
+    def __getitem__(self, item: str):
+        return getattr(self, item)
+
+    def __setitem__(self, key: str, value: Union[Optional[str], List[str]]):
+        setattr(self, key, value)
 
 
 def kill_all_processes(proc_name: str) -> None:
@@ -171,6 +185,7 @@ class ColvirUtils:
 
 class Colvir:
     def __init__(self, colvir_info: ColvirInfo, buttons: Buttons) -> None:
+        kill_all_processes(proc_name="COLVIR")
         self.info = colvir_info
         self.app: Optional[pywinauto.Application] = None
         self.utils = ColvirUtils(app=self.app)
@@ -240,11 +255,62 @@ class Colvir:
         mode_win["Edit2"].set_text(text=mode)
         self.utils.press(mode_win["Edit2"], "~")
 
+    def close_entry_without_saving(
+        self, order_win: pywinauto.WindowSpecification
+    ) -> None:
+        order_win.type_keys("{ESC}")
+        confirm_win = self.utils.get_window(title="Подтверждение")
+        confirm_win["&Нет"].click()
+
     def close_dialog(self) -> None:
         dialog_win = self.utils.get_window(title="Colvir Banking System", found_index=0)
         dialog_win.set_focus()
         sleep(0.5)
         dialog_win["OK"].click_input()
+
+    @staticmethod
+    def parse_dialog_content(dialog_text: str) -> DialogContent:
+        lines = list(filter(lambda l: l, dialog_text.split("\r\n")))
+
+        dialog_content = DialogContent(title=None, content=None, button_names=[])
+
+        section = None
+        for line in lines:
+            if line.startswith("[Window Title]"):
+                section = "title"
+            elif line.startswith("[Content]"):
+                section = "content"
+            elif (
+                line.startswith("[OK]")
+                or line.startswith("[Cancel]")
+                or line.startswith("[")
+            ):
+                dialog_content.button_names.append(line.strip("[]"))
+            else:
+                if section:
+                    dialog_content[section] = line
+                    section = None
+
+        return dialog_content
+
+    def dialog_text(self) -> Optional[str]:
+        dialog_win = self.app.window(title="Colvir Banking System", found_index=0)
+        if not dialog_win.exists():
+            return None
+
+        if not dialog_win.has_focus():
+            dialog_win.set_focus()
+            sleep(0.5)
+
+        dialog_win.type_keys("^C")
+        sleep(0.5)
+        dialog_text = pyperclip.paste()
+
+        dialog_content = self.parse_dialog_content(dialog_text=dialog_text)
+        dialog_content_text = dialog_content.content
+        if dialog_content_text is not None:
+            dialog_win.close()
+        return dialog_content_text
 
     def check_and_click(self, button: Button, target_button_name: str) -> None:
         mouse.move(coords=(button.x, button.y))

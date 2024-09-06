@@ -1,9 +1,7 @@
 from datetime import datetime
 from enum import Enum
-from time import sleep
 from typing import Optional, Tuple, Union
 
-import pywinauto
 from attr import define
 from pywinauto import mouse
 
@@ -96,7 +94,7 @@ class BusinessTripOrder:
     end_date: Date
     trip_place: str
     trip_code: str
-    trip_target: str
+    trip_reason: str
     main_order_number: str
     main_order_start_date: Date
     deputy_fullname: Optional[str]
@@ -104,6 +102,21 @@ class BusinessTripOrder:
     employee_status: Optional[str] = None
     branch_num: Optional[str] = None
     tab_num: Optional[str] = None
+
+    def as_dict_short(self):
+        return {
+            "employee_fullname": self.employee_fullname,
+            "order_number": self.order_number,
+            "sign_date": self.sign_date.short,
+            "start_date": self.start_date.short,
+            "end_date": self.end_date.short,
+            "trip_place": self.trip_place,
+            "trip_code": self.trip_code,
+            "trip_reason": self.trip_reason,
+            "main_order_number": self.main_order_number,
+            "main_order_start_date": self.main_order_start_date.short,
+            "deputy_fullname": self.deputy_fullname,
+        }
 
     def as_dict(self):
         return {
@@ -115,7 +128,7 @@ class BusinessTripOrder:
             "end_date": self.end_date.as_dict(),
             "trip_place": self.trip_place,
             "trip_code": self.trip_code,
-            "trip_target": self.trip_target,
+            "trip_reason": self.trip_reason,
             "main_order_number": self.main_order_number,
             "main_order_start_date": self.main_order_start_date.as_dict(),
             "deputy_fullname": self.deputy_fullname,
@@ -139,6 +152,19 @@ class VacationOrder:
     employee_status: Optional[str] = None
     branch_num: Optional[str] = None
     tab_num: Optional[str] = None
+
+    def as_dict_short(self):
+        return {
+            "employee_fullname": self.employee_fullname,
+            "order_type": self.order_type,
+            "order_number": self.order_number,
+            "start_date": self.start_date.short,
+            "end_date": self.end_date.short,
+            "deputy_fullname": self.deputy_fullname,
+            "surcharge": self.surcharge,
+            "substitution_start": self.substitution_start,
+            "substitution_end": self.substitution_end,
+        }
 
     def as_dict(self):
         return {
@@ -167,13 +193,21 @@ class VacationWithdrawOrder:
     branch_num: Optional[str] = None
     tab_num: Optional[str] = None
 
+    def as_dict_short(self):
+        return {
+            "employee_fullname": self.employee_fullname,
+            "order_type": self.order_type,
+            "order_number": self.order_number,
+            "withdraw_date": self.withdraw_date.short,
+        }
+
     def as_dict(self):
         return {
             "employee_fullname": self.employee_fullname,
             "employee_names": self.employee_names,
             "order_type": self.order_type,
             "order_number": self.order_number,
-            "withdraw_date": self.withdraw_date.as_dict(),
+            "withdraw_date": self.withdraw_date.short,
         }
 
 
@@ -188,6 +222,14 @@ class FiringOrder:
     employee_status: Optional[str] = None
     branch_num: Optional[str] = None
     tab_num: Optional[str] = None
+
+    def as_dict_short(self):
+        return {
+            "employee_fullname": self.employee_fullname,
+            "firing_reason": self.firing_reason,
+            "order_number": self.order_number,
+            "firing_date": self.firing_date.as_dict(),
+        }
 
     def as_dict(self):
         return {

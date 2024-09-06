@@ -1,42 +1,42 @@
 import os
+import pickle
 import sys
 import warnings
 from datetime import datetime
+from typing import List, Type, Callable, Tuple
 from urllib.parse import urljoin
 
 import dotenv
 
-
-try:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    import business_trip.colvir
-    import firings.colvir
-    import vacation_withdraws.colvir
-    import vacations.colvir
-    from robots import bpm
-    from robots.bpm import driver_init
-    from robots.data import (
-        BpmInfo,
-        CredentialsBPM,
-        ChromePath,
-        ColvirInfo,
-        Processes,
-        Process,
-        ProcessType,
-        Buttons,
-    )
-    from robots.notification import TelegramAPI, handle_error
-    from robots.utils.colvir_utils import Colvir, kill_all_processes
-
-except ModuleNotFoundError as error:
-    raise error
-
+import business_trip.colvir
+import firings.colvir
+import vacation_withdraws.colvir
+import vacations.colvir
+from robots import bpm
+from robots.data import (
+    BpmInfo,
+    CredentialsBPM,
+    ChromePath,
+    ColvirInfo,
+    Processes,
+    Process,
+    ProcessType,
+    BusinessTripOrder,
+    VacationOrder,
+    VacationWithdrawOrder,
+    FiringOrder,
+    Order,
+    Buttons,
+)
+from robots.notification import TelegramAPI, handle_error
+from robots.utils.colvir_utils import Colvir
+from robots.utils.utils import create_report, update_report
 
 if sys.version_info.major != 3 or sys.version_info.minor != 12:
     raise RuntimeError(f"Python {sys.version_info} is not supported")
 
 warnings.simplefilter(action="ignore", category=UserWarning)
-project_folder = os.path.dirname(os.path.dirname(__file__))
+project_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dotenv.load_dotenv(os.path.join(project_folder, ".env.test"))
 
 
@@ -162,28 +162,63 @@ def main(bot: TelegramAPI) -> None:
         ),
     )
 
-    # with driver_init(bpm_info=bpm_info) as driver:
-    #     is_logged_in = False
-    #     for process in processes:
-    #         bpm.run(
-    #             driver=driver,
-    #             is_logged_in=is_logged_in,
-    #             bpm_info=bpm_info,
-    #             process=process,
-    #             bot=bot,
-    #         )
-    #         is_logged_in = True
+    with bpm.driver_init(bpm_info=bpm_info) as driver:
+        is_logged_in = False
+        for process in processes:
+            bpm.run(
+                driver=driver,
+                is_logged_in=is_logged_in,
+                bpm_info=bpm_info,
+                process=process,
+                bot=bot,
+            )
+            is_logged_in = True
 
     buttons = Buttons()
-
-    kill_all_processes(proc_name="COLVIR")
     with Colvir(colvir_info=colvir_info, buttons=buttons) as colvir:
-        business_trip.colvir.run(colvir, processes.business_trip, bot=bot)
-        vacations.colvir.run(colvir, processes.vacation, bot=bot)
-        vacation_withdraws.colvir.run(colvir, processes.vacation_withdraw, bot=bot)
-        firings.colvir.run(colvir, processes.firing, bot=bot)
+        process_run(process=processes.business_trip, colvir=colvir, bot=bot)
+        process_run(process=processes.vacation, colvir=colvir, bot=bot)
+        process_run(process=processes.vacation_withdraw, colvir=colvir, bot=bot)
+        process_run(process=processes.firing, colvir=colvir, bot=bot)
 
     bot.send_message("Успешное окончание процесса")
+
+
+ProcessCallable = Callable[[Colvir, Process, Order], str]
+
+
+def get_order_type_and_processor(
+    process_type: ProcessType,
+) -> Tuple[Type[Order], ProcessCallable]:
+    if process_type == ProcessType.BUSINESS_TRIP:
+        return BusinessTripOrder, business_trip.colvir.process_order
+    elif process_type == ProcessType.VACATION:
+        return VacationOrder, vacations.colvir.process_order
+    elif process_type == ProcessType.VACATION_WITHDRAW:
+        return VacationWithdrawOrder, vacation_withdraws.colvir.process_order
+    else:
+        return FiringOrder, firings.colvir.process_order
+
+
+def process_run(process: Process, colvir: Colvir, bot: TelegramAPI):
+    order_t, process_order = get_order_type_and_processor(process.process_type)
+
+    with open(process.pickle_path, "rb") as f:
+        orders: List[order_t] = pickle.load(f)
+    assert all(isinstance(order, order_t) for order in orders)
+
+    create_report(process.report_path)
+
+    for order in orders:
+        bot.send_message(bot.to_md(order), use_md=True)
+        report_status = process_order(colvir, process, order)
+        if report_status:
+            update_report(
+                order=order,
+                process=process,
+                operation="Создание приказа",
+                status=report_status,
+            )
 
 
 if __name__ == "__main__":

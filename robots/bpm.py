@@ -35,6 +35,8 @@ def driver_init(bpm_info: BpmInfo) -> Chrome:
     prefs = {"profile.default_content_setting_values.notifications": 2}
     options.add_experimental_option("prefs", prefs)
     options.add_argument("--start-maximized")
+    options.add_experimental_option("excludeSwitches", ["enable-logging"])
+    options.add_argument("--log-level=3")
     options.add_experimental_option(
         "prefs",
         {
@@ -128,7 +130,7 @@ def convert_to_dataclass(process: Process) -> int:
                 "Дата начала": "start_date",
                 "Дата окончания": "end_date",
                 "Место командирования": "trip_place",
-                "Цель командировки": "trip_target",
+                "Цель командировки": "trip_reason",
                 "Номер основного приказа": "main_order_number",
                 "Дата начала основного приказа": "main_order_start_date",
                 "Имя замещающего сотрудника": "deputy_fullname",
@@ -176,7 +178,7 @@ def convert_to_dataclass(process: Process) -> int:
                 end_date=Date(order_dict["end_date"]),
                 trip_place=trip_place,
                 trip_code=trip_code,
-                trip_target=order_dict["trip_target"],
+                trip_reason=order_dict["trip_reason"],
                 main_order_number=order_dict["main_order_number"],
                 main_order_start_date=Date(order_dict["main_order_start_date"]),
                 deputy_fullname=order_dict["deputy_fullname"],
