@@ -14,7 +14,7 @@ import pywinauto.timings
 import win32con
 import win32gui
 from attr import define
-from pywinauto import mouse, win32functions
+from pywinauto import mouse, win32functions, ElementNotFoundError
 
 from robots.data import (
     ColvirInfo,
@@ -340,7 +340,7 @@ class Colvir:
         mouse.move(coords=(mid_point.x, mid_point.y))
 
         start_point = rectangle.left if horizontal else rectangle.top
-        end_point = rectangle.right if horizontal else rectangle.bottom
+        end_point = mid_point.x if horizontal else mid_point.y
 
         x, y = mid_point.x, mid_point.y
         point = 0
@@ -349,10 +349,10 @@ class Colvir:
         y_offset = offset if not horizontal else 0
 
         i = 0
-        while (
-            status_win["StatusBar"].window_text().strip() != target_button_name
-            or point >= end_point
-        ):
+        while status_win["StatusBar"].window_text().strip() != target_button_name:
+            if point > end_point:
+                raise ElementNotFoundError
+
             point = start_point + i * 5
 
             if horizontal:
