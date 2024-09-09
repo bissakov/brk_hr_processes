@@ -21,11 +21,5 @@ pip install -r .\requirements.txt
 ### CMD
 
 ```bat
-set "PYTHONPATH=%cd%;%PYTHONPATH%" && python .\robots\main.py
-```
-
-### PowerShell
-
-```bat
-$env:PYTHONPATH = "$env:PYTHONPATH;$pwd"; python .\robots\main.py
+python .\src\main.py
 ```
