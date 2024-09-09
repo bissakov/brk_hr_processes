@@ -12,8 +12,8 @@ import business_trip.colvir
 import firings.colvir
 import vacation_withdraws.colvir
 import vacations.colvir
-from robots import bpm
-from robots.data import (
+from src import bpm
+from src.data import (
     BpmInfo,
     CredentialsBPM,
     ChromePath,
@@ -28,9 +28,9 @@ from robots.data import (
     Order,
     Buttons,
 )
-from robots.notification import TelegramAPI, handle_error
-from robots.utils.colvir_utils import Colvir
-from robots.utils.utils import create_report, update_report
+from src.notification import TelegramAPI, handle_error
+from src.utils.colvir_utils import Colvir
+from src.utils.utils import create_report, update_report
 
 if sys.version_info.major != 3 or sys.version_info.minor != 12:
     raise RuntimeError(f"Python {sys.version_info} is not supported")
@@ -96,7 +96,7 @@ def get_process(
 
 
 @handle_error
-def main(bot: TelegramAPI) -> None:
+def run(bot: TelegramAPI) -> None:
     data_folder = os.path.join(project_folder, "data")
     os.makedirs(data_folder, exist_ok=True)
 
@@ -219,8 +219,3 @@ def process_run(process: Process, colvir: Colvir, bot: TelegramAPI):
                 operation="Создание приказа",
                 status=report_status,
             )
-
-
-if __name__ == "__main__":
-    telegram_bot = TelegramAPI()
-    main(bot=telegram_bot)

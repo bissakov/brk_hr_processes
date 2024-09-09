@@ -13,7 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
-from robots.data import (
+from src.data import (
     CredentialsBPM,
     BpmInfo,
     Date,
@@ -25,7 +25,7 @@ from robots.data import (
     Order,
     FiringOrder,
 )
-from robots.notification import TelegramAPI
+from src.notification import TelegramAPI
 
 
 def driver_init(bpm_info: BpmInfo) -> Chrome:

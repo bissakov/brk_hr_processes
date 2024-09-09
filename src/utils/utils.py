@@ -5,8 +5,8 @@ import pandas as pd
 from pywinauto import mouse
 from pywinauto.win32structures import RECT
 
-from robots.data import Order, Process, BusinessTripOrder
-from robots.utils.colvir_utils import Colvir
+from src.data import Order, Process, BusinessTripOrder
+from src.utils.colvir_utils import Colvir
 
 
 def create_report(report_file_path: str):

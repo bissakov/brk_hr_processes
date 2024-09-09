@@ -9,7 +9,7 @@ from typing import Dict, Optional, Tuple, Callable, Any, Union, List
 import requests
 import requests.adapters
 
-from robots.data import Order
+from src.data import Order
 
 
 def get_secrets() -> Tuple[str, str]:

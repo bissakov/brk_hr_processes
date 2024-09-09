@@ -1,8 +1,8 @@
 from time import sleep
 from typing import Optional
 
-from robots.data import VacationOrder, Button, Process
-from robots.utils.colvir_utils import Colvir
+from src.data import VacationOrder, Button, Process
+from src.utils.colvir_utils import Colvir
 
 
 def process_order(colvir: Colvir, process: Process, order: VacationOrder) -> str:

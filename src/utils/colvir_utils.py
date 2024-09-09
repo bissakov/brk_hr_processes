@@ -16,7 +16,7 @@ import win32gui
 from attr import define
 from pywinauto import mouse, win32functions, ElementNotFoundError
 
-from robots.data import (
+from src.data import (
     ColvirInfo,
     Date,
     Order,
@@ -28,7 +28,7 @@ from robots.data import (
     VacationWithdrawOrder,
     FiringOrder,
 )
-from robots.utils.excel_utils import xls_to_xlsx
+from src.utils.excel_utils import xls_to_xlsx
 
 pyautogui.FAILSAFE = False
 
