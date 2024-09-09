@@ -3,8 +3,8 @@ from typing import Optional
 
 import pywinauto
 
-from robots.data import BusinessTripOrder, Button, Process
-from robots.utils.colvir_utils import Colvir
+from src.data import BusinessTripOrder, Button, Process
+from src.utils.colvir_utils import Colvir
 
 
 def process_order(colvir: Colvir, process: Process, order: BusinessTripOrder) -> str:

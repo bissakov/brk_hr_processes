@@ -1,19 +1,17 @@
 from time import sleep
 from typing import Optional
 
-from robots.data import (
+from src.data import (
     Process,
-    VacationWithdrawOrder,
+    FiringOrder,
     Button,
 )
-from robots.utils.colvir_utils import (
+from src.utils.colvir_utils import (
     Colvir,
 )
 
 
-def process_order(
-    colvir: Colvir, process: Process, order: VacationWithdrawOrder
-) -> str:
+def process_order(colvir: Colvir, process: Process, order: FiringOrder) -> str:
     personal_win, orders_win, report_status = colvir.process_employee_order_status(
         process=process, order=order
     )
@@ -84,7 +82,7 @@ def process_order(
 
 def create_new_entry(
     colvir: Colvir,
-    order: VacationWithdrawOrder,
+    order: FiringOrder,
 ) -> Optional[str]:
     return None
 
