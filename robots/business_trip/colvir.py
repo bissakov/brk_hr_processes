@@ -1,6 +1,8 @@
 from time import sleep
 from typing import Optional
 
+import pywinauto
+
 from robots.data import BusinessTripOrder, Button, Process
 from robots.utils.colvir_utils import Colvir
 
@@ -54,18 +56,59 @@ def process_order(colvir: Colvir, process: Process, order: BusinessTripOrder) ->
 
     orders_win.wait(wait_for="active enabled")
 
-    colvir.find_and_click_button(
-        button=colvir.buttons.operations_list_prs,
-        window=orders_win,
-        toolbar=orders_win["Static4"],
-        target_button_name="Выполнить операцию",
-    )
-
     report_status = confirm_new_entry(colvir=colvir)
     if report_status:
         orders_win.close()
         personal_win.close()
         return report_status
+
+    # command_win = colvir.app.window(title="Распоряжение на командировку")
+    # command_win.close()
+
+    komandirovka_win = colvir.app.window(title="Командировка")
+    if komandirovka_win.exists():
+        if not komandirovka_win.has_focus():
+            komandirovka_win.set_focus()
+
+        komandirovka_win["Edit20"].click_input()
+        komandirovka_win["Edit20"].set_text(order.order_number)
+
+        komandirovka_win["Edit22"].click_input()
+        komandirovka_win["Edit22"].set_text(order.main_order_start_date.short)
+
+        komandirovka_win["Edit18"].click_input()
+        komandirovka_win["Edit18"].set_text(order.start_date.short)
+
+        komandirovka_win["Edit16"].click_input()
+        komandirovka_win["Edit16"].set_text(order.end_date.short)
+
+        komandirovka_win["Edit14"].click_input()
+        komandirovka_win["Edit14"].type_keys("К", pause=0.1)
+        komandirovka_win.type_keys("{TAB}", pause=1)
+
+        komandirovka_win["Edit10"].click_input()
+        komandirovka_win["Edit10"].type_keys(order.trip_code, pause=0.1)
+        komandirovka_win.type_keys("{TAB}", pause=1)
+
+        komandirovka_win["Edit8"].click_input()
+        komandirovka_win["Edit8"].type_keys(
+            order.trip_reason, pause=0.1, with_spaces=True
+        )
+        komandirovka_win.type_keys("{TAB}", pause=1)
+
+        if order.deputy_fullname is not None:
+            pass
+
+        komandirovka_win["Принять"].click()
+
+        error_win = colvir.app.window(title="Произошла ошибка")
+        if error_win.exists():
+            error_msg = error_win.child_window(class_name="Edit").window_text()
+            error_win.close()
+            return (
+                f"Не удалось ИСПОЛНИТЬ приказ. Требуется проверка специалистом. "
+                f'Текст ошибки - "{error_msg}"'
+            )
 
     pass
 
@@ -100,7 +143,7 @@ def create_new_entry(
     sleep(1)
 
     order_win["Edit4"].click_input()
-    order_win["Edit4"].type_keys(order.branch_num, pause=0.2)
+    order_win["Edit4"].type_keys(order.branch_num, pause=0.1)
     order_win.type_keys("{TAB}", pause=1)
 
     dialog_text = colvir.dialog_text()
@@ -113,7 +156,7 @@ def create_new_entry(
         )
 
     order_win["Edit10"].click_input()
-    order_win["Edit10"].type_keys(order.tab_num, pause=0.2)
+    order_win["Edit10"].type_keys(order.tab_num, pause=0.1)
     order_win.type_keys("{TAB}", pause=1)
 
     dialog_text = colvir.dialog_text()
@@ -141,7 +184,7 @@ def create_new_entry(
             f"Неизвестный город/местоположение - {order.trip_place}"
         )
 
-    order_win["Edit28"].type_keys(order.trip_code, pause=0.2)
+    order_win["Edit28"].type_keys(order.trip_code, pause=0.1)
     order_win["Edit28"].click_input()
     order_win.type_keys("{TAB}", pause=1)
 
@@ -167,14 +210,29 @@ def create_new_entry(
     return None
 
 
-def confirm_new_entry(colvir: Colvir) -> Optional[str]:
-    sleep(0.5)
-    colvir.buttons.operation = Button(
-        colvir.buttons.operations_list_prs.x,
-        colvir.buttons.operations_list_prs.y + 25,
+def confirm_new_entry(
+    colvir: Colvir, orders_win: pywinauto.WindowSpecification
+) -> Optional[str]:
+    colvir.find_and_click_button(
+        button=colvir.buttons.operations_list_prs,
+        window=orders_win,
+        toolbar=orders_win["Static4"],
+        target_button_name="Выполнить операцию",
     )
-    colvir.check_and_click(
-        button=colvir.buttons.operation, target_button_name="Регистрация"
+
+    sleep(1)
+
+    popup_menu = colvir.app.PopupMenu
+
+    if not popup_menu.exists():
+        raise Exception('Menu "Выполнить операцию" was not clicked')
+
+    colvir.find_and_click_button(
+        button=colvir.buttons.operation,
+        window=orders_win,
+        toolbar=colvir.app.PopupMenu,
+        target_button_name="Регистрация",
+        horizontal=False,
     )
 
     registration_win = colvir.utils.get_window(title="Подтверждение")
@@ -204,10 +262,6 @@ def confirm_new_entry(colvir: Colvir) -> Optional[str]:
     confirm_win["&Да"].click()
     colvir.utils.wiggle_mouse(duration=2)
 
-    command_win = colvir.app.window(title="Распоряжение на командировку")
-    if command_win.exists():
-        command_win.close()
-
     error_win = colvir.app.window(title="Произошла ошибка")
     if error_win.exists():
         error_msg = error_win.child_window(class_name="Edit").window_text()
@@ -216,4 +270,5 @@ def confirm_new_entry(colvir: Colvir) -> Optional[str]:
             f"Не удалось ИСПОЛНИТЬ приказ. Требуется проверка специалистом. "
             f'Текст ошибки - "{error_msg}"'
         )
+
     return None
