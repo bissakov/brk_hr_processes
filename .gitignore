@@ -9,3 +9,4 @@ wheelhouse/
 *.zip
 .env
 .env.*
+foo.py
