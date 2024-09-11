@@ -10,9 +10,12 @@ import dotenv
 
 import business_trip.colvir
 import firings.colvir
+import mentorships.colvir
+import vacation_add_pays.colvir
 import vacation_withdraws.colvir
 import vacations.colvir
 from src import bpm
+from src import mail
 from src.data import (
     BpmInfo,
     CredentialsBPM,
@@ -27,6 +30,9 @@ from src.data import (
     FiringOrder,
     Order,
     Buttons,
+    Mail,
+    MentorshipOrder,
+    VacationAddPayOrder,
 )
 from src.notification import TelegramAPI, handle_error
 from src.utils.colvir_utils import Colvir
@@ -46,53 +52,64 @@ def get_from_env(key: str) -> str:
     return value
 
 
-class BusinessTripsError(Exception):
-    pass
-
-
-class FiringsError(Exception):
-    pass
-
-
-class VacationsError(Exception):
-    pass
-
-
-class VacationWithdrawsError(Exception):
-    pass
-
-
-def get_process(
-    process_type: ProcessType,
+def get_processes(
     bpm_base_url: str,
     download_folder: str,
     report_parent_folder: str,
     today: str,
-) -> Process:
-    csv_filename = f"{process_type.name.lower()}_{today}.csv"
-    pickle_filename = f"{process_type.name.lower()}_{today}.pkl"
-    if process_type == ProcessType.BUSINESS_TRIP:
-        report_filename = f"Отчет_командировки_{today}.xlsx"
-    elif process_type == ProcessType.BUSINESS_TRIP:
-        report_filename = f"Отчет_отпусков_{today}.xlsx"
-    elif process_type == ProcessType.BUSINESS_TRIP:
-        report_filename = f"Отчет_отзывов_отпусков_{today}.xlsx"
-    else:
-        report_filename = f"Отчет_увольнений_{today}.xlsx"
+) -> Processes:
+    def get_process(
+        process_type: ProcessType,
+    ) -> Process:
+        csv_filename = f"{process_type.name.lower()}_{today}.csv"
+        pickle_filename = f"{process_type.name.lower()}_{today}.pkl"
+        if process_type == ProcessType.BUSINESS_TRIP:
+            report_filename = f"Отчет_командировки_{today}.xlsx"
+            process_name = "Командировки"
+        elif process_type == ProcessType.VACATION:
+            report_filename = f"Отчет_отпусков_{today}.xlsx"
+            process_name = "Отпуска"
+        elif process_type == ProcessType.VACATION_WITHDRAW:
+            report_filename = f"Отчет_отзывов_отпусков_{today}.xlsx"
+            process_name = "Отзывы из отпусков"
+        elif process_type == ProcessType.FIRING:
+            report_filename = f"Отчет_увольнений_{today}.xlsx"
+            process_name = "Увольнения"
+        elif process_type == ProcessType.MENTORSHIP:
+            report_filename = f"Отчет_менторств_{today}.xlsx"
+            process_name = "Менторства"
+        elif process_type == ProcessType.VACATION_ADD_PAY:
+            report_filename = f"Отчет_доплата_совмещение_на_период_отпуска_{today}.xlsx"
+            process_name = "Доплата за совмещение должностей на период отпуска"
+        else:
+            raise ValueError(
+                f"Unknown process type: ProcessType(name={process_type.name}, value={process_type.value})"
+            )
 
-    report_folder = os.path.join(report_parent_folder, process_type.name.lower())
+        report_folder = os.path.join(report_parent_folder, process_type.name.lower())
 
-    return Process(
-        process_type=process_type,
-        download_url=urljoin(
-            bpm_base_url, f"?s=rep_b&id={process_type.value}&reset_page=1&gid=739"
-        ),
-        csv_path=os.path.join(download_folder, csv_filename),
-        report_folder=report_folder,
-        pickle_path=os.path.join(report_folder, pickle_filename),
-        report_path=os.path.join(report_folder, report_filename),
-        today=today,
+        return Process(
+            process_type=process_type,
+            process_name=process_name,
+            download_url=urljoin(
+                bpm_base_url, f"?s=rep_b&id={process_type.value}&reset_page=1&gid=739"
+            ),
+            csv_path=os.path.join(download_folder, csv_filename),
+            report_folder=report_folder,
+            pickle_path=os.path.join(report_folder, pickle_filename),
+            report_path=os.path.join(report_folder, report_filename),
+            today=today,
+        )
+
+    processes = Processes(
+        business_trip=get_process(ProcessType.BUSINESS_TRIP),
+        vacation=get_process(ProcessType.VACATION),
+        vacation_withdraw=get_process(ProcessType.VACATION_WITHDRAW),
+        firing=get_process(ProcessType.FIRING),
+        mentorship=get_process(ProcessType.MENTORSHIP),
+        vacation_add_pay=get_process(ProcessType.VACATION_ADD_PAY),
     )
+    return processes
 
 
 @handle_error
@@ -131,46 +148,22 @@ def run(bot: TelegramAPI) -> None:
     )
 
     bpm_base_url = get_from_env("BPM_BASE_URL")
-    processes = Processes(
-        business_trip=get_process(
-            ProcessType.BUSINESS_TRIP,
-            bpm_base_url,
-            download_folder,
-            report_parent_folder,
-            today,
-        ),
-        vacation=get_process(
-            ProcessType.VACATION,
-            bpm_base_url,
-            download_folder,
-            report_parent_folder,
-            today,
-        ),
-        vacation_withdraw=get_process(
-            ProcessType.VACATION_WITHDRAW,
-            bpm_base_url,
-            download_folder,
-            report_parent_folder,
-            today,
-        ),
-        firing=get_process(
-            ProcessType.FIRING,
-            bpm_base_url,
-            download_folder,
-            report_parent_folder,
-            today,
-        ),
+    processes = get_processes(
+        bpm_base_url=bpm_base_url,
+        download_folder=download_folder,
+        report_parent_folder=report_parent_folder,
+        today=today,
     )
 
+    is_logged_in = False
     with bpm.driver_init(bpm_info=bpm_info) as driver:
-        is_logged_in = False
         for process in processes:
             bpm.run(
                 driver=driver,
-                is_logged_in=is_logged_in,
                 bpm_info=bpm_info,
                 process=process,
                 bot=bot,
+                is_logged_in=is_logged_in,
             )
             is_logged_in = True
 
@@ -180,6 +173,8 @@ def run(bot: TelegramAPI) -> None:
         process_run(process=processes.vacation, colvir=colvir, bot=bot)
         process_run(process=processes.vacation_withdraw, colvir=colvir, bot=bot)
         process_run(process=processes.firing, colvir=colvir, bot=bot)
+        process_run(process=processes.mentorship, colvir=colvir, bot=bot)
+        process_run(process=processes.vacation_add_pay, colvir=colvir, bot=bot)
 
     bot.send_message("Успешное окончание процесса")
 
@@ -196,8 +191,16 @@ def get_order_type_and_processor(
         return VacationOrder, vacations.colvir.process_order
     elif process_type == ProcessType.VACATION_WITHDRAW:
         return VacationWithdrawOrder, vacation_withdraws.colvir.process_order
-    else:
+    elif process_type == ProcessType.FIRING:
         return FiringOrder, firings.colvir.process_order
+    elif process_type == ProcessType.MENTORSHIP:
+        return MentorshipOrder, mentorships.colvir.process_order
+    elif process_type == ProcessType.VACATION_ADD_PAY:
+        return VacationAddPayOrder, vacation_add_pays.colvir.process_order
+    else:
+        ValueError(
+            f"Unknown process type: ProcessType(name={process_type.name}, value={process_type.value})"
+        )
 
 
 def process_run(process: Process, colvir: Colvir, bot: TelegramAPI):
@@ -209,6 +212,14 @@ def process_run(process: Process, colvir: Colvir, bot: TelegramAPI):
 
     create_report(process.report_path)
 
+    mail_info = Mail(
+        server=get_from_env("SMTP_SERVER"),
+        sender=get_from_env("SMTP_SENDER"),
+        recipients=get_from_env("SMTP_RECIPIENTS"),
+        subject=f'Отчет по процессу "{process.process_name}"',
+        attachment_path=process.report_path,
+    )
+
     for order in orders:
         bot.send_message(bot.to_md(order), use_md=True)
         report_status = process_order(colvir, process, order)
@@ -219,3 +230,5 @@ def process_run(process: Process, colvir: Colvir, bot: TelegramAPI):
                 operation="Создание приказа",
                 status=report_status,
             )
+
+    mail.send_mail(mail_info)
