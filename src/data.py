@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Iterator, NamedTuple
 
-from attr import define
+import dataclasses
 from pywinauto import mouse
 
 
@@ -11,11 +11,13 @@ class ProcessType(Enum):
     VACATION = 13630
     VACATION_WITHDRAW = 13631
     FIRING = 13632
+    MENTORSHIP = 13636
+    VACATION_ADD_PAY = 99999
 
 
-@define
-class Process:
+class Process(NamedTuple):
     process_type: ProcessType
+    process_name: str
     download_url: str
     csv_path: str
     report_folder: str
@@ -24,46 +26,51 @@ class Process:
     today: str
 
 
-@define
+@dataclasses.dataclass(slots=True, frozen=True)
 class Processes:
     business_trip: Process
     vacation: Process
     vacation_withdraw: Process
     firing: Process
+    mentorship: Process
+    vacation_add_pay: Process
 
-    def __iter__(self):
-        return iter(
-            (self.business_trip, self.vacation, self.vacation_withdraw, self.firing)
-        )
+    def __iter__(self) -> Iterator[Process]:
+        for field in dataclasses.fields(self):
+            yield getattr(self, field.name)
 
 
-@define
-class ChromePath:
+class ChromePath(NamedTuple):
     driver_path: str
     binary_path: str
 
 
-@define
-class CredentialsBPM:
+class CredentialsBPM(NamedTuple):
     user: str
     password: str
 
 
-@define
-class BpmInfo:
+class BpmInfo(NamedTuple):
     chrome_path: ChromePath
     creds: CredentialsBPM
     download_folder: str
 
 
-@define
-class ColvirInfo:
+class ColvirInfo(NamedTuple):
     location: str
     user: str
     password: str
 
 
-@define
+class Mail(NamedTuple):
+    server: str
+    sender: str
+    recipients: str
+    subject: str
+    attachment_path: str
+
+
+@dataclasses.dataclass(slots=True)
 class Date:
     dt: datetime
     long: Optional[str] = None
@@ -84,7 +91,7 @@ class Date:
         }
 
 
-@define
+@dataclasses.dataclass(slots=True)
 class BusinessTripOrder:
     employee_fullname: str
     employee_names: Tuple[str, str]
@@ -136,7 +143,7 @@ class BusinessTripOrder:
         }
 
 
-@define
+@dataclasses.dataclass(slots=True)
 class VacationOrder:
     employee_fullname: str
     employee_names: Tuple[str, str]
@@ -182,7 +189,7 @@ class VacationOrder:
         }
 
 
-@define
+@dataclasses.dataclass(slots=True)
 class VacationWithdrawOrder:
     employee_fullname: str
     employee_names: Tuple[str, str]
@@ -207,11 +214,11 @@ class VacationWithdrawOrder:
             "employee_names": self.employee_names,
             "order_type": self.order_type,
             "order_number": self.order_number,
-            "withdraw_date": self.withdraw_date.short,
+            "withdraw_date": self.withdraw_date.as_dict(),
         }
 
 
-@define
+@dataclasses.dataclass(slots=True)
 class FiringOrder:
     employee_fullname: str
     employee_names: Tuple[str, str]
@@ -228,7 +235,7 @@ class FiringOrder:
             "employee_fullname": self.employee_fullname,
             "firing_reason": self.firing_reason,
             "order_number": self.order_number,
-            "firing_date": self.firing_date.as_dict(),
+            "firing_date": self.firing_date.short,
         }
 
     def as_dict(self):
@@ -242,10 +249,72 @@ class FiringOrder:
         }
 
 
-Order = Union[BusinessTripOrder, VacationOrder, VacationWithdrawOrder, FiringOrder]
+@dataclasses.dataclass(slots=True)
+class MentorshipOrder:
+    employee_fullname: str
+    work_start_date: Date
+    contract_start_date: Date
+    contract_end_date: Date
+    mentor_fullname: str
+    mentrorship_order_number: str
+    mentorship_start_date: Date
+    mentorship_end_date: Date
+    creation_date: Date
+    employee_status: Optional[str] = None
+    branch_num: Optional[str] = None
+    tab_num: Optional[str] = None
+
+    def as_dict_short(self):
+        return {
+            "employee_fullname": self.employee_fullname,
+            "work_start_date": self.work_start_date.short,
+            "contract_start_date": self.contract_start_date.short,
+            "contract_end_date": self.contract_end_date.short,
+            "mentor_fullname": self.mentor_fullname,
+            "mentrorship_order_number": self.mentrorship_order_number,
+            "mentorship_start_date": self.mentorship_start_date.short,
+            "mentorship_end_date": self.mentorship_end_date.short,
+            "creation_date": self.creation_date.short,
+        }
+
+    def as_dict(self):
+        return {
+            "employee_fullname": self.employee_fullname,
+            "work_start_date": self.work_start_date.as_dict(),
+            "contract_start_date": self.contract_start_date.as_dict(),
+            "contract_end_date": self.contract_end_date.as_dict(),
+            "mentor_fullname": self.mentor_fullname,
+            "mentrorship_order_number": self.mentrorship_order_number,
+            "mentorship_start_date": self.mentorship_start_date.as_dict(),
+            "mentorship_end_date": self.mentorship_end_date.as_dict(),
+            "creation_date": self.creation_date.as_dict(),
+        }
 
 
-@define
+@dataclasses.dataclass(slots=True)
+class VacationAddPayOrder:
+    employee_status: Optional[str] = None
+    branch_num: Optional[str] = None
+    tab_num: Optional[str] = None
+
+    def as_dict_short(self):
+        raise NotImplementedError()
+
+    def as_dict(self):
+        raise NotImplementedError()
+
+
+Order = Union[
+    BusinessTripOrder,
+    VacationOrder,
+    VacationWithdrawOrder,
+    FiringOrder,
+    MentorshipOrder,
+    VacationAddPayOrder,
+]
+
+
+@dataclasses.dataclass(slots=True)
 class Button:
     x: int = -1
     y: int = -1
@@ -254,13 +323,12 @@ class Button:
         mouse.click(button="left", coords=(self.x, self.y))
 
 
-@define
+@dataclasses.dataclass(slots=True)
 class Buttons:
-    clear_form: Button = Button()
-    employee_orders: Button = Button()
-    create_new_order: Button = Button()
-    order_save: Button = Button()
-    operations_list_prs: Button = Button()
-    operations_list_orders: Button = Button()
-    operation: Button = Button()
-    cities_menu: Button = Button()
+    clear_form: Button = dataclasses.field(default_factory=Button)
+    employee_orders: Button = dataclasses.field(default_factory=Button)
+    create_new_order: Button = dataclasses.field(default_factory=Button)
+    order_save: Button = dataclasses.field(default_factory=Button)
+    operations_list_prs: Button = dataclasses.field(default_factory=Button)
+    operations_list_orders: Button = dataclasses.field(default_factory=Button)
+    cities_menu: Button = dataclasses.field(default_factory=Button)

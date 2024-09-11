@@ -318,21 +318,16 @@ class Colvir:
         if status_bar.window_text().strip() == target_button_name:
             button.click()
 
-    def find_and_click_button(
+    def find_and_click_button_temp(
         self,
-        button: Button,
         window: pywinauto.WindowSpecification,
         toolbar: pywinauto.WindowSpecification,
         target_button_name: str,
         horizontal: bool = True,
         offset: int = 5,
-    ) -> Button:
+    ) -> None:
         if not window.has_focus():
             window.set_focus()
-
-        if button.x != -1 and button.y != -1:
-            button.click()
-            return button
 
         status_win = self.app.window(title_re="Банковская система.+")
         rectangle = toolbar.rectangle()
@@ -363,14 +358,62 @@ class Colvir:
             mouse.move(coords=(x, y))
             i += 1
 
-        window.set_focus()
-        sleep(1)
+        x += x_offset
+        y += y_offset
 
-        button.x = x + x_offset
-        button.y = y + y_offset
+        mouse.click(button="left", coords=(x, y))
+
+    def find_and_click_button(
+        self,
+        button: Button,
+        window: pywinauto.WindowSpecification,
+        toolbar: pywinauto.WindowSpecification,
+        target_button_name: str,
+        horizontal: bool = True,
+        offset: int = 5,
+    ) -> None:
+        if not window.has_focus():
+            window.set_focus()
+
+        if button.x != -1 and button.y != -1:
+            button.click()
+            return
+
+        status_win = self.app.window(title_re="Банковская система.+")
+        rectangle = toolbar.rectangle()
+        mid_point = rectangle.mid_point()
+        mouse.move(coords=(mid_point.x, mid_point.y))
+
+        start_point = rectangle.left if horizontal else rectangle.top
+        end_point = mid_point.x if horizontal else mid_point.y
+
+        x, y = mid_point.x, mid_point.y
+        point = 0
+
+        x_offset = offset if horizontal else 0
+        y_offset = offset if not horizontal else 0
+
+        i = 0
+        while status_win["StatusBar"].window_text().strip() != target_button_name:
+            if point > end_point:
+                raise ElementNotFoundError
+
+            point = start_point + i * 5
+
+            if horizontal:
+                x = point
+            else:
+                y = point
+
+            mouse.move(coords=(x, y))
+            i += 1
+
+        x += x_offset
+        y += y_offset
+
+        button.x = x
+        button.y = y
         button.click()
-
-        return button
 
     def save_excel(self, work_folder: str) -> str:
         file_win = self.utils.get_window(title="Выберите файл для экспорта")

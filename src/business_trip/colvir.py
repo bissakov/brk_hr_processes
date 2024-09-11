@@ -3,7 +3,7 @@ from typing import Optional
 
 import pywinauto
 
-from src.data import BusinessTripOrder, Button, Process
+from src.data import BusinessTripOrder, Process
 from src.utils.colvir_utils import Colvir
 
 
@@ -56,7 +56,7 @@ def process_order(colvir: Colvir, process: Process, order: BusinessTripOrder) ->
 
     orders_win.wait(wait_for="active enabled")
 
-    report_status = confirm_new_entry(colvir=colvir)
+    report_status = confirm_new_entry(colvir=colvir, orders_win=orders_win)
     if report_status:
         orders_win.close()
         personal_win.close()
@@ -100,6 +100,8 @@ def process_order(colvir: Colvir, process: Process, order: BusinessTripOrder) ->
             pass
 
         komandirovka_win["Принять"].click()
+
+        sleep(1)
 
         error_win = colvir.app.window(title="Произошла ошибка")
         if error_win.exists():
@@ -227,10 +229,9 @@ def confirm_new_entry(
     if not popup_menu.exists():
         raise Exception('Menu "Выполнить операцию" was not clicked')
 
-    colvir.find_and_click_button(
-        button=colvir.buttons.operation,
+    colvir.find_and_click_button_temp(
         window=orders_win,
-        toolbar=colvir.app.PopupMenu,
+        toolbar=popup_menu,
         target_button_name="Регистрация",
         horizontal=False,
     )
@@ -250,14 +251,28 @@ def confirm_new_entry(
 
     colvir.buttons.operations_list_prs.click()
     sleep(1)
-    colvir.buttons.operation.click()
+
+    colvir.find_and_click_button_temp(
+        window=orders_win,
+        toolbar=popup_menu,
+        target_button_name="Утвердить",
+        horizontal=False,
+    )
+
     confirm_win = colvir.utils.get_window(title="Подтверждение")
     confirm_win["&Да"].click()
     colvir.utils.wiggle_mouse(duration=2)
 
     colvir.buttons.operations_list_prs.click()
     sleep(1)
-    colvir.buttons.operation.click()
+
+    colvir.find_and_click_button_temp(
+        window=orders_win,
+        toolbar=popup_menu,
+        target_button_name="Исполнить",
+        horizontal=False,
+    )
+
     confirm_win = colvir.utils.get_window(title="Подтверждение")
     confirm_win["&Да"].click()
     colvir.utils.wiggle_mouse(duration=2)

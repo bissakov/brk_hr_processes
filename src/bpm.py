@@ -24,6 +24,7 @@ from src.data import (
     VacationWithdrawOrder,
     Order,
     FiringOrder,
+    MentorshipOrder,
 )
 from src.notification import TelegramAPI
 
@@ -289,6 +290,78 @@ def convert_to_dataclass(process: Process) -> int:
                 firing_date=Date(order_dict["firing_date"]),
             )
             orders.append(order)
+    elif process.process_type == ProcessType.MENTORSHIP:
+        df = df[
+            [
+                "Имя сотрудника",
+                "Первый рабочий день",
+                "Начало договора",
+                "Окончание договора",
+                "ФИО ментора",
+                "Номер приказа о менторстве",
+                "Начало менторства",
+                "Окончание менторства",
+                "Дата создания",
+            ]
+        ]
+
+        df = df.rename(
+            columns={
+                "Имя сотрудника": "employee_fullname",
+                # "ИИН": "iin",
+                # "Дата рождения": "birth_date",
+                # "Пол": "gender",
+                # "Национальность": "nationality",
+                # "Гражданство": "citizenship",
+                # "Семейное положение": "marital_status",
+                # "Количество детей": "children_count",
+                # "Номер приказа": "order_number",
+                # "Должность": "position",
+                # "Подразделение": "branch",
+                "Первый рабочий день": "work_start_date",
+                # "График работы": "work_schedule",
+                # "Тип работы": "work_type",
+                # "Характер работы": "work_nature",
+                "Начало договора": "contract_start_date",
+                "Окончание договора": "contract_end_date",
+                "ФИО ментора": "mentor_fullname",
+                "Номер приказа о менторстве": "mentrorship_order_number",
+                "Начало менторства": "mentorship_start_date",
+                "Окончание менторства": "mentorship_end_date",
+                "Дата создания": "creation_date",
+            }
+        )
+        df = df.dropna(subset=["employee_fullname"])
+        df = df.dropna(subset=["work_start_date"])
+        df = df.dropna(subset=["contract_start_date"])
+        df = df.dropna(subset=["mentor_fullname"])
+
+        df.loc[:, "employee_names"] = df["employee_fullname"].str.split()
+        df.loc[:, "mentor_names"] = df["mentor_fullname"].str.split()
+
+        for col in [
+            "work_start_date",
+            "contract_start_date",
+            "contract_start_date",
+            "mentorship_start_date",
+            "mentorship_end_date",
+        ]:
+            df[col] = pd.to_datetime(df[col], format="%d.%m.%Y")
+        df = df.replace({np.nan: None})
+
+        for _, order_dict in df.iterrows():
+            order = MentorshipOrder(
+                employee_fullname=order_dict["employee_fullname"],
+                work_start_date=order_dict["work_start_date"],
+                contract_start_date=order_dict["contract_start_date"],
+                contract_end_date=order_dict["contract_end_date"],
+                mentor_fullname=order_dict["mentor_fullname"],
+                mentrorship_order_number=order_dict["mentrorship_order_number"],
+                mentorship_start_date=order_dict["mentorship_start_date"],
+                mentorship_end_date=order_dict["mentorship_end_date"],
+                creation_date=order_dict["creation_date"],
+            )
+            orders.append(order)
 
     with open(process.pickle_path, "wb") as f:
         pickle.dump(orders, f)
@@ -304,10 +377,10 @@ def convert_to_dataclass(process: Process) -> int:
 
 def run(
     driver: Chrome,
-    is_logged_in: bool,
     bpm_info: BpmInfo,
     process: Process,
     bot: TelegramAPI,
+    is_logged_in: bool,
 ) -> None:
     wait = WebDriverWait(driver, 10)
     if not is_logged_in:
