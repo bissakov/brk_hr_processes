@@ -27,6 +27,8 @@ from src.data import (
     VacationOrder,
     VacationWithdrawOrder,
     FiringOrder,
+    MentorshipOrder,
+    VacationAddPayOrder,
 )
 from src.utils.excel_utils import xls_to_xlsx
 
@@ -58,6 +60,22 @@ def kill_all_processes(proc_name: str) -> None:
 class ColvirUtils:
     def __init__(self, app: Optional[pywinauto.Application]):
         self.app = app
+
+    @staticmethod
+    def wiggle_mouse(duration: int) -> None:
+        def get_random_coords() -> Tuple[int, int]:
+            screen = pyautogui.size()
+            width = screen[0]
+            height = screen[1]
+
+            return random.randint(100, width - 200), random.randint(100, height - 200)
+
+        max_wiggles = random.randint(4, 9)
+        step_sleep = duration / max_wiggles
+
+        for _ in range(1, max_wiggles):
+            coords = get_random_coords()
+            pyautogui.moveTo(x=coords[0], y=coords[1], duration=step_sleep)
 
     @staticmethod
     def close_window(
@@ -154,33 +172,11 @@ class ColvirUtils:
             return False
         return True
 
-    @staticmethod
-    def does_order_exist(
-        orders_file_path: str, order_type: str, order_number: str
-    ) -> bool:
-        df = pd.read_excel(orders_file_path, skiprows=1)
-
-        order_exists = (
-            (df["Вид приказа"] == order_type) & (df["Номер приказа"] == order_number)
-        ).any()
-
-        return order_exists
-
-    @staticmethod
-    def wiggle_mouse(duration: int) -> None:
-        def get_random_coords() -> Tuple[int, int]:
-            screen = pyautogui.size()
-            width = screen[0]
-            height = screen[1]
-
-            return random.randint(100, width - 200), random.randint(100, height - 200)
-
-        max_wiggles = random.randint(4, 9)
-        step_sleep = duration / max_wiggles
-
-        for _ in range(1, max_wiggles):
-            coords = get_random_coords()
-            pyautogui.moveTo(x=coords[0], y=coords[1], duration=step_sleep)
+    def close_dialog(self) -> None:
+        dialog_win = self.get_window(title="Colvir Banking System", found_index=0)
+        dialog_win.set_focus()
+        sleep(0.5)
+        dialog_win["OK"].click_input()
 
 
 class Colvir:
@@ -203,23 +199,6 @@ class Colvir:
                 continue
         assert self.app is not None, Exception("max_retries exceeded")
         self.utils.app = self.app
-
-    def change_password(self) -> bool:
-        attention_win = self.app.window(title="Внимание")
-        if not attention_win.exists():
-            return False
-        attention_win["OK"].click()
-
-        change_password_win = self.app.window(title_re="Смена пароля.+")
-        change_password_win["Edit0"].set_text("ROBOTIZ2024_")
-        change_password_win["Edit2"].set_text("ROBOTIZ2024_")
-        change_password_win["OK"].click()
-
-        confirm_win = self.app.window(title="Colvir Banking System", found_index=1)
-        confirm_win.send_keystrokes("{ENTER}")
-
-        mode_win = self.app.window(title="Выбор режима")
-        return mode_win.exists()
 
     def login(self) -> None:
         login_win = self.app.window(title="Вход в систему")
@@ -261,12 +240,6 @@ class Colvir:
         order_win.type_keys("{ESC}")
         confirm_win = self.utils.get_window(title="Подтверждение")
         confirm_win["&Нет"].click()
-
-    def close_dialog(self) -> None:
-        dialog_win = self.utils.get_window(title="Colvir Banking System", found_index=0)
-        dialog_win.set_focus()
-        sleep(0.5)
-        dialog_win["OK"].click_input()
 
     @staticmethod
     def parse_dialog_content(dialog_text: str) -> DialogContent:
@@ -450,14 +423,14 @@ class Colvir:
         attention_win = self.app.window(title="Внимание")
         if not attention_win.exists():
             start_date = Date(start_date.dt - timedelta(days=1))
-            self.close_dialog()
+            self.utils.close_dialog()
             self.change_oper_day(start_date=start_date)
             return
 
         attention_win["&Да"].click()
         current_oper_day_win["OK"].click()
         sleep(0.5)
-        self.close_dialog()
+        self.utils.close_dialog()
 
     def find_employee(
         self,
@@ -489,25 +462,45 @@ class Colvir:
 
         return True
 
+    @staticmethod
+    def does_order_exist(
+        orders_file_path: str, order_type: str, order_number: str
+    ) -> bool:
+        df = pd.read_excel(orders_file_path, skiprows=1)
+
+        order_exists = (
+            (df["Вид приказа"] == order_type) & (df["Номер приказа"] == order_number)
+        ).any()
+
+        return order_exists
+
     def process_employee_order_status(self, process: Process, order: Order) -> Tuple[
         Optional[pywinauto.WindowSpecification],
         Optional[pywinauto.WindowSpecification],
         Optional[str],
     ]:
-        if isinstance(order, BusinessTripOrder):
-            order = cast(BusinessTripOrder, order)
-            start_date = order.start_date
-        elif isinstance(order, VacationOrder):
-            order = cast(VacationOrder, order)
-            start_date = order.start_date
-        elif isinstance(order, VacationWithdrawOrder):
-            order = cast(VacationWithdrawOrder, order)
-            start_date = order.withdraw_date
-        elif isinstance(order, FiringOrder):
-            order = cast(FiringOrder, order)
-            start_date = order.firing_date
-        else:
-            raise ValueError(f"Order is of unknown type - {type(order)}")
+        match order:
+            case BusinessTripOrder():
+                order = cast(BusinessTripOrder, order)
+                start_date = order.start_date
+            case VacationOrder():
+                order = cast(VacationOrder, order)
+                start_date = order.start_date
+            case VacationWithdrawOrder():
+                order = cast(VacationWithdrawOrder, order)
+                start_date = order.withdraw_date
+            case FiringOrder():
+                order = cast(FiringOrder, order)
+                start_date = order.firing_date
+            case MentorshipOrder():
+                order = cast(MentorshipOrder, order)
+                start_date = order.creation_date
+            case VacationAddPayOrder():
+                order = cast(VacationAddPayOrder, order)
+                # FIXME: fix
+                start_date = order.date
+            case _:
+                raise ValueError(f"Order is of unknown type - {type(order)}")
 
         self.change_oper_day(start_date=start_date)
         if not self.find_employee(employee_names=order.employee_names):
@@ -524,9 +517,9 @@ class Colvir:
         orders_win = self.utils.get_window(title="Приказы сотрудника")
         orders_win.menu_select("#4->#4->#1")
 
-        if self.utils.does_order_exist(
+        if self.does_order_exist(
             orders_file_path=self.save_excel(work_folder=process.report_folder),
-            order_type="Приказ о отправке работника в командировку",
+            order_type=process.order_type,
             order_number=order.order_number,
         ):
             orders_win.close()
@@ -584,6 +577,82 @@ class Colvir:
 
         return_win = self.utils.get_window(title="Возврат из командировки")
         return_win["Принять"].click()
+
+    def confirm_new_entry(
+        self, orders_win: pywinauto.WindowSpecification
+    ) -> Optional[str]:
+        self.find_and_click_button(
+            button=self.buttons.operations_list_prs,
+            window=orders_win,
+            toolbar=orders_win["Static4"],
+            target_button_name="Выполнить операцию",
+        )
+
+        sleep(1)
+
+        popup_menu = self.app.PopupMenu
+
+        if not popup_menu.exists():
+            raise Exception('Menu "Выполнить операцию" was not clicked')
+
+        self.find_and_click_button_temp(
+            window=orders_win,
+            toolbar=popup_menu,
+            target_button_name="Регистрация",
+            horizontal=False,
+        )
+
+        registration_win = self.utils.get_window(title="Подтверждение")
+        registration_win["&Да"].click()
+        sleep(2)
+        confirm_win = self.app.window(title="Подтверждение")
+        if confirm_win.exists():
+            confirm_win.close()
+        sleep(1)
+        dossier_win = self.app.window(title="Досье сотрудника")
+        if dossier_win.exists():
+            dossier_win.close()
+
+        self.utils.wiggle_mouse(duration=2)
+
+        self.buttons.operations_list_prs.click()
+        sleep(1)
+
+        self.find_and_click_button_temp(
+            window=orders_win,
+            toolbar=popup_menu,
+            target_button_name="Утвердить",
+            horizontal=False,
+        )
+
+        confirm_win = self.utils.get_window(title="Подтверждение")
+        confirm_win["&Да"].click()
+        self.utils.wiggle_mouse(duration=2)
+
+        self.buttons.operations_list_prs.click()
+        sleep(1)
+
+        self.find_and_click_button_temp(
+            window=orders_win,
+            toolbar=popup_menu,
+            target_button_name="Исполнить",
+            horizontal=False,
+        )
+
+        confirm_win = self.utils.get_window(title="Подтверждение")
+        confirm_win["&Да"].click()
+        self.utils.wiggle_mouse(duration=2)
+
+        error_win = self.app.window(title="Произошла ошибка")
+        if error_win.exists():
+            error_msg = error_win.child_window(class_name="Edit").window_text()
+            error_win.close()
+            return (
+                f"Не удалось ИСПОЛНИТЬ приказ. Требуется проверка специалистом. "
+                f'Текст ошибки - "{error_msg}"'
+            )
+
+        return None
 
     def __enter__(self) -> "Colvir":
         self.open_colvir()
