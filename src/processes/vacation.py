@@ -1,7 +1,7 @@
 from time import sleep
 from typing import Optional
 
-from src.data import VacationOrder, Button, Process
+from src.data import VacationOrder, Process
 from src.utils.colvir_utils import Colvir
 
 
@@ -54,14 +54,7 @@ def process_order(colvir: Colvir, process: Process, order: VacationOrder) -> str
 
     orders_win.wait(wait_for="active enabled")
 
-    colvir.find_and_click_button(
-        button=colvir.buttons.operations_list_prs,
-        window=orders_win,
-        toolbar=orders_win["Static4"],
-        target_button_name="Выполнить операцию",
-    )
-
-    report_status = confirm_new_entry(colvir=colvir)
+    report_status = colvir.confirm_new_entry(orders_win=orders_win)
     if report_status:
         orders_win.close()
         personal_win.close()
@@ -147,52 +140,4 @@ def create_new_entry(
         toolbar=order_win["Static3"],
         target_button_name="Сохранить изменения (PgDn)",
     )
-    return None
-
-
-def confirm_new_entry(colvir: Colvir) -> Optional[str]:
-    sleep(0.5)
-    colvir.buttons.operation = Button(
-        colvir.buttons.operations_list_prs.x,
-        colvir.buttons.operations_list_prs.y + 25,
-    )
-    colvir.check_and_click(
-        button=colvir.buttons.operation, target_button_name="Регистрация"
-    )
-
-    registration_win = colvir.utils.get_window(title="Подтверждение")
-    registration_win["&Да"].click()
-    sleep(2)
-    confirm_win = colvir.app.window(title="Подтверждение")
-    if confirm_win.exists():
-        confirm_win.close()
-    sleep(1)
-    dossier_win = colvir.app.window(title="Досье сотрудника")
-    if dossier_win.exists():
-        dossier_win.close()
-
-    colvir.utils.wiggle_mouse(duration=2)
-
-    colvir.buttons.operations_list_prs.click()
-    sleep(1)
-    colvir.buttons.operation.click()
-    confirm_win = colvir.utils.get_window(title="Подтверждение")
-    confirm_win["&Да"].click()
-    colvir.utils.wiggle_mouse(duration=2)
-
-    colvir.buttons.operations_list_prs.click()
-    sleep(1)
-    colvir.buttons.operation.click()
-    confirm_win = colvir.utils.get_window(title="Подтверждение")
-    confirm_win["&Да"].click()
-    colvir.utils.wiggle_mouse(duration=2)
-
-    error_win = colvir.app.window(title="Произошла ошибка")
-    if error_win.exists():
-        error_msg = error_win.child_window(class_name="Edit").window_text()
-        error_win.close()
-        return (
-            f"Не удалось ИСПОЛНИТЬ приказ. Требуется проверка специалистом. "
-            f'Текст ошибки - "{error_msg}"'
-        )
     return None

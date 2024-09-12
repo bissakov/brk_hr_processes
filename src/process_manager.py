@@ -8,12 +8,12 @@ from urllib.parse import urljoin
 
 import dotenv
 
-import business_trip.colvir
-import firings.colvir
-import mentorships.colvir
-import vacation_add_pays.colvir
-import vacation_withdraws.colvir
-import vacations.colvir
+from processes import business_trip
+from processes import firing
+from processes import mentorship
+from processes import vacation_add_pay
+from processes import vacation_withdraw
+from processes import vacation
 from src import bpm
 from src import mail
 from src.data import (
@@ -55,49 +55,74 @@ def get_from_env(key: str) -> str:
 def get_processes(
     bpm_base_url: str,
     download_folder: str,
-    report_parent_folder: str,
+    report_root_folder: str,
     today: str,
 ) -> Processes:
     def get_process(
         process_type: ProcessType,
     ) -> Process:
-        csv_filename = f"{process_type.name.lower()}_{today}.csv"
-        pickle_filename = f"{process_type.name.lower()}_{today}.pkl"
-        if process_type == ProcessType.BUSINESS_TRIP:
-            report_filename = f"Отчет_командировки_{today}.xlsx"
-            process_name = "Командировки"
-        elif process_type == ProcessType.VACATION:
-            report_filename = f"Отчет_отпусков_{today}.xlsx"
-            process_name = "Отпуска"
-        elif process_type == ProcessType.VACATION_WITHDRAW:
-            report_filename = f"Отчет_отзывов_отпусков_{today}.xlsx"
-            process_name = "Отзывы из отпусков"
-        elif process_type == ProcessType.FIRING:
-            report_filename = f"Отчет_увольнений_{today}.xlsx"
-            process_name = "Увольнения"
-        elif process_type == ProcessType.MENTORSHIP:
-            report_filename = f"Отчет_менторств_{today}.xlsx"
-            process_name = "Менторства"
-        elif process_type == ProcessType.VACATION_ADD_PAY:
-            report_filename = f"Отчет_доплата_совмещение_на_период_отпуска_{today}.xlsx"
-            process_name = "Доплата за совмещение должностей на период отпуска"
-        else:
-            raise ValueError(
-                f"Unknown process type: ProcessType(name={process_type.name}, value={process_type.value})"
-            )
+        process_type_name = process_type.name.lower()
+        csv_filename = f"{process_type_name}_{today}.csv"
+        pickle_filename = f"{process_type_name}_{today}.pkl"
 
-        report_folder = os.path.join(report_parent_folder, process_type.name.lower())
+        download_url = urljoin(
+            bpm_base_url, f"?s=rep_b&id={process_type.value}&reset_page=1&gid=739"
+        )
+
+        match process_type:
+            case ProcessType.BUSINESS_TRIP:
+                report_filename = f"Отчет_командировки_{today}.xlsx"
+                process_name = "Командировки"
+                order_type = "Приказ о отправке работника в командировку"
+            case ProcessType.VACATION:
+                report_filename = f"Отчет_отпусков_{today}.xlsx"
+                process_name = "Отпуска"
+                order_type = "Приказ о отправке работника в командировку"
+            case ProcessType.VACATION_WITHDRAW:
+                report_filename = f"Отчет_отзывов_отпусков_{today}.xlsx"
+                process_name = "Отзывы из отпусков"
+                order_type = "Приказ о отправке работника в командировку"
+            case ProcessType.FIRING:
+                report_filename = f"Отчет_увольнений_{today}.xlsx"
+                process_name = "Увольнения"
+                order_type = "Приказ о отправке работника в командировку"
+            case ProcessType.MENTORSHIP:
+                report_filename = f"Отчет_менторств_{today}.xlsx"
+                process_name = "Менторства"
+                order_type = "Приказ о отправке работника в командировку"
+            case ProcessType.VACATION_ADD_PAY:
+                report_filename = (
+                    f"Отчет_доплата_совмещение_на_период_отпуска_{today}.xlsx"
+                )
+                process_name = "Доплата за совмещение должностей на период отпуска"
+                order_type = "Приказ о отправке работника в командировку"
+                download_url = urljoin(
+                    bpm_base_url, f"?s=obj_a&gid={process_type.value}&reset_page=1"
+                )
+            case _:
+                raise ValueError(
+                    f"Unknown process type: ProcessType(name={process_type.name}, value={process_type.value})"
+                )
+
+        report_folder = os.path.join(report_root_folder, process_type_name)
+        os.makedirs(report_folder, exist_ok=True)
+
+        csv_folder = os.path.join(download_folder, process_type.name.lower())
+        os.makedirs(csv_folder, exist_ok=True)
+
+        csv_path = os.path.join(csv_folder, csv_filename)
+        pickle_path = os.path.join(report_folder, pickle_filename)
+        report_path = os.path.join(report_folder, report_filename)
 
         return Process(
             process_type=process_type,
             process_name=process_name,
-            download_url=urljoin(
-                bpm_base_url, f"?s=rep_b&id={process_type.value}&reset_page=1&gid=739"
-            ),
-            csv_path=os.path.join(download_folder, csv_filename),
+            order_type=order_type,
+            download_url=download_url,
+            csv_path=csv_path,
             report_folder=report_folder,
-            pickle_path=os.path.join(report_folder, pickle_filename),
-            report_path=os.path.join(report_folder, report_filename),
+            pickle_path=pickle_path,
+            report_path=report_path,
             today=today,
         )
 
@@ -117,10 +142,20 @@ def run(bot: TelegramAPI) -> None:
     data_folder = os.path.join(project_folder, "data")
     os.makedirs(data_folder, exist_ok=True)
 
-    report_parent_folder = os.path.join(data_folder, "reports")
-    os.makedirs(report_parent_folder, exist_ok=True)
+    today_dt = datetime.now()
+    current_month_name = today_dt.strftime("%B")
 
-    download_folder = os.path.join(data_folder, "downloads")
+    report_root_folder = os.path.join(
+        data_folder, "reports", str(today_dt.year), current_month_name
+    )
+    os.makedirs(report_root_folder, exist_ok=True)
+
+    download_folder = os.path.join(
+        data_folder,
+        "downloads",
+        str(today_dt.year),
+        current_month_name,
+    )
     os.makedirs(download_folder, exist_ok=True)
 
     bpm_info = BpmInfo(
@@ -140,8 +175,7 @@ def run(bot: TelegramAPI) -> None:
         password=get_from_env("COLVIR_PASSWORD"),
     )
 
-    today = datetime.now().strftime("%d.%m.%y")
-
+    today = today_dt.strftime("%d.%m.%y")
     bot.send_message(
         f"Старт процесса за {today}\n"
         f'"Командировки, отпуска, отзывы из отпуска и увольнения"'
@@ -151,7 +185,7 @@ def run(bot: TelegramAPI) -> None:
     processes = get_processes(
         bpm_base_url=bpm_base_url,
         download_folder=download_folder,
-        report_parent_folder=report_parent_folder,
+        report_root_folder=report_root_folder,
         today=today,
     )
 
@@ -160,7 +194,7 @@ def run(bot: TelegramAPI) -> None:
         for process in processes:
             bpm.run(
                 driver=driver,
-                bpm_info=bpm_info,
+                creds=bpm_info.creds,
                 process=process,
                 bot=bot,
                 is_logged_in=is_logged_in,
@@ -185,22 +219,23 @@ ProcessCallable = Callable[[Colvir, Process, Order], str]
 def get_order_type_and_processor(
     process_type: ProcessType,
 ) -> Tuple[Type[Order], ProcessCallable]:
-    if process_type == ProcessType.BUSINESS_TRIP:
-        return BusinessTripOrder, business_trip.colvir.process_order
-    elif process_type == ProcessType.VACATION:
-        return VacationOrder, vacations.colvir.process_order
-    elif process_type == ProcessType.VACATION_WITHDRAW:
-        return VacationWithdrawOrder, vacation_withdraws.colvir.process_order
-    elif process_type == ProcessType.FIRING:
-        return FiringOrder, firings.colvir.process_order
-    elif process_type == ProcessType.MENTORSHIP:
-        return MentorshipOrder, mentorships.colvir.process_order
-    elif process_type == ProcessType.VACATION_ADD_PAY:
-        return VacationAddPayOrder, vacation_add_pays.colvir.process_order
-    else:
-        ValueError(
-            f"Unknown process type: ProcessType(name={process_type.name}, value={process_type.value})"
-        )
+    match process_type:
+        case ProcessType.BUSINESS_TRIP:
+            return BusinessTripOrder, business_trip.process_order
+        case ProcessType.VACATION:
+            return VacationOrder, vacation.process_order
+        case ProcessType.VACATION_WITHDRAW:
+            return VacationWithdrawOrder, vacation_withdraw.process_order
+        case ProcessType.FIRING:
+            return FiringOrder, firing.process_order
+        case ProcessType.MENTORSHIP:
+            return MentorshipOrder, mentorship.process_order
+        case ProcessType.VACATION_ADD_PAY:
+            return VacationAddPayOrder, vacation_add_pay.process_order
+        case _:
+            ValueError(
+                f"Unknown process type: ProcessType(name={process_type.name}, value={process_type.value})"
+            )
 
 
 def process_run(process: Process, colvir: Colvir, bot: TelegramAPI):

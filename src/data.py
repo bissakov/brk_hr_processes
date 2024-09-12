@@ -1,8 +1,8 @@
+import dataclasses
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Tuple, Union, Iterator, NamedTuple
+from typing import Optional, Union, Iterator, NamedTuple, Tuple
 
-import dataclasses
 from pywinauto import mouse
 
 
@@ -12,12 +12,13 @@ class ProcessType(Enum):
     VACATION_WITHDRAW = 13631
     FIRING = 13632
     MENTORSHIP = 13636
-    VACATION_ADD_PAY = 99999
+    VACATION_ADD_PAY = 854
 
 
 class Process(NamedTuple):
     process_type: ProcessType
     process_name: str
+    order_type: str
     download_url: str
     csv_path: str
     report_folder: str
@@ -293,6 +294,8 @@ class MentorshipOrder:
 
 @dataclasses.dataclass(slots=True)
 class VacationAddPayOrder:
+    # FIXME
+    date: Date
     employee_status: Optional[str] = None
     branch_num: Optional[str] = None
     tab_num: Optional[str] = None
