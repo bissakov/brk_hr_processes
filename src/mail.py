@@ -5,9 +5,15 @@ import smtplib
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import List
+from typing import List, NamedTuple
 
-from src.data import Mail
+
+class Mail(NamedTuple):
+    server: str
+    sender: str
+    recipients: str
+    subject: str
+    attachment_path: str
 
 
 def send_mail(mail_info: Mail) -> bool:

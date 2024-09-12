@@ -1,9 +1,10 @@
+import dataclasses
 import os
 import random
 import re
 from datetime import timedelta
 from time import sleep
-from typing import Optional, Tuple, cast, List, Union
+from typing import Optional, Tuple, cast, List, Union, NamedTuple
 
 import pandas as pd
 import psutil
@@ -17,11 +18,8 @@ from attr import define
 from pywinauto import mouse, win32functions, ElementNotFoundError
 
 from src.data import (
-    ColvirInfo,
     Date,
     Order,
-    Buttons,
-    Button,
     Process,
     BusinessTripOrder,
     VacationOrder,
@@ -33,6 +31,32 @@ from src.data import (
 from src.utils.excel_utils import xls_to_xlsx
 
 pyautogui.FAILSAFE = False
+
+
+class ColvirInfo(NamedTuple):
+    location: str
+    user: str
+    password: str
+
+
+@dataclasses.dataclass(slots=True)
+class Button:
+    x: int = -1
+    y: int = -1
+
+    def click(self) -> None:
+        mouse.click(button="left", coords=(self.x, self.y))
+
+
+@dataclasses.dataclass(slots=True)
+class Buttons:
+    clear_form: Button = dataclasses.field(default_factory=Button)
+    employee_orders: Button = dataclasses.field(default_factory=Button)
+    create_new_order: Button = dataclasses.field(default_factory=Button)
+    order_save: Button = dataclasses.field(default_factory=Button)
+    operations_list_prs: Button = dataclasses.field(default_factory=Button)
+    operations_list_orders: Button = dataclasses.field(default_factory=Button)
+    cities_menu: Button = dataclasses.field(default_factory=Button)
 
 
 @define
@@ -180,12 +204,12 @@ class ColvirUtils:
 
 
 class Colvir:
-    def __init__(self, colvir_info: ColvirInfo, buttons: Buttons) -> None:
+    def __init__(self, colvir_info: ColvirInfo) -> None:
         kill_all_processes(proc_name="COLVIR")
         self.info = colvir_info
         self.app: Optional[pywinauto.Application] = None
         self.utils = ColvirUtils(app=self.app)
-        self.buttons = buttons
+        self.buttons = Buttons()
 
     def open_colvir(self) -> None:
         for _ in range(10):

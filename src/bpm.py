@@ -5,7 +5,7 @@ import pickle
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -16,8 +16,6 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
 from src.data import (
-    CredentialsBPM,
-    BpmInfo,
     Date,
     ProcessType,
     VacationOrder,
@@ -29,6 +27,22 @@ from src.data import (
     MentorshipOrder,
 )
 from src.notification import TelegramAPI
+
+
+class ChromePath(NamedTuple):
+    driver_path: str
+    binary_path: str
+
+
+class CredentialsBPM(NamedTuple):
+    user: str
+    password: str
+
+
+class BpmInfo(NamedTuple):
+    chrome_path: ChromePath
+    creds: CredentialsBPM
+    download_folder: str
 
 
 def driver_init(bpm_info: BpmInfo) -> Chrome:

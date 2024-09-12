@@ -3,8 +3,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Union, Iterator, NamedTuple, Tuple
 
-from pywinauto import mouse
-
 
 class ProcessType(Enum):
     BUSINESS_TRIP = 13635
@@ -39,36 +37,6 @@ class Processes:
     def __iter__(self) -> Iterator[Process]:
         for field in dataclasses.fields(self):
             yield getattr(self, field.name)
-
-
-class ChromePath(NamedTuple):
-    driver_path: str
-    binary_path: str
-
-
-class CredentialsBPM(NamedTuple):
-    user: str
-    password: str
-
-
-class BpmInfo(NamedTuple):
-    chrome_path: ChromePath
-    creds: CredentialsBPM
-    download_folder: str
-
-
-class ColvirInfo(NamedTuple):
-    location: str
-    user: str
-    password: str
-
-
-class Mail(NamedTuple):
-    server: str
-    sender: str
-    recipients: str
-    subject: str
-    attachment_path: str
 
 
 @dataclasses.dataclass(slots=True)
@@ -315,23 +283,3 @@ Order = Union[
     MentorshipOrder,
     VacationAddPayOrder,
 ]
-
-
-@dataclasses.dataclass(slots=True)
-class Button:
-    x: int = -1
-    y: int = -1
-
-    def click(self) -> None:
-        mouse.click(button="left", coords=(self.x, self.y))
-
-
-@dataclasses.dataclass(slots=True)
-class Buttons:
-    clear_form: Button = dataclasses.field(default_factory=Button)
-    employee_orders: Button = dataclasses.field(default_factory=Button)
-    create_new_order: Button = dataclasses.field(default_factory=Button)
-    order_save: Button = dataclasses.field(default_factory=Button)
-    operations_list_prs: Button = dataclasses.field(default_factory=Button)
-    operations_list_orders: Button = dataclasses.field(default_factory=Button)
-    cities_menu: Button = dataclasses.field(default_factory=Button)
