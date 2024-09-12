@@ -11,16 +11,12 @@ import dotenv
 from processes import business_trip
 from processes import firing
 from processes import mentorship
+from processes import vacation
 from processes import vacation_add_pay
 from processes import vacation_withdraw
-from processes import vacation
 from src import bpm
 from src import mail
 from src.data import (
-    BpmInfo,
-    CredentialsBPM,
-    ChromePath,
-    ColvirInfo,
     Processes,
     Process,
     ProcessType,
@@ -29,13 +25,11 @@ from src.data import (
     VacationWithdrawOrder,
     FiringOrder,
     Order,
-    Buttons,
-    Mail,
     MentorshipOrder,
     VacationAddPayOrder,
 )
 from src.notification import TelegramAPI, handle_error
-from src.utils.colvir_utils import Colvir
+from src.utils.colvir_utils import Colvir, ColvirInfo
 from src.utils.utils import create_report, update_report
 
 if sys.version_info.major != 3 or sys.version_info.minor != 12:
@@ -158,11 +152,11 @@ def run(bot: TelegramAPI) -> None:
     )
     os.makedirs(download_folder, exist_ok=True)
 
-    bpm_info = BpmInfo(
-        creds=CredentialsBPM(
+    bpm_info = bpm.BpmInfo(
+        creds=bpm.CredentialsBPM(
             user=get_from_env("BPM_USER"), password=get_from_env("BPM_PASSWORD")
         ),
-        chrome_path=ChromePath(
+        chrome_path=bpm.ChromePath(
             driver_path=os.path.join(project_folder, get_from_env("DRIVER_PATH")),
             binary_path=os.path.join(project_folder, get_from_env("CHROME_PATH")),
         ),
@@ -201,8 +195,7 @@ def run(bot: TelegramAPI) -> None:
             )
             is_logged_in = True
 
-    buttons = Buttons()
-    with Colvir(colvir_info=colvir_info, buttons=buttons) as colvir:
+    with Colvir(colvir_info=colvir_info) as colvir:
         process_run(process=processes.business_trip, colvir=colvir, bot=bot)
         process_run(process=processes.vacation, colvir=colvir, bot=bot)
         process_run(process=processes.vacation_withdraw, colvir=colvir, bot=bot)
@@ -247,7 +240,7 @@ def process_run(process: Process, colvir: Colvir, bot: TelegramAPI):
 
     create_report(process.report_path)
 
-    mail_info = Mail(
+    mail_info = mail.Mail(
         server=get_from_env("SMTP_SERVER"),
         sender=get_from_env("SMTP_SENDER"),
         recipients=get_from_env("SMTP_RECIPIENTS"),
